@@ -3,7 +3,6 @@
 Detects waste items (bottle, can, bag, wrapper) in beach/coastal images using YOLOv8, scores pollution severity, and tracks results over time on a dashboard.
 
 ## Architecture
-
 ```
 React Frontend -
       │  (upload image, view dashboard)
