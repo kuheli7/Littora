@@ -3,7 +3,6 @@
 Detects waste items (bottle, can, bag, wrapper) in beach/coastal images using YOLOv8, scores pollution severity, and tracks results over time on a dashboard.
 
 ## Architecture
-
 ```
 React Frontend -
       │  (upload image, view dashboard)
@@ -30,7 +29,7 @@ Dashboard & Analytics (Recharts)
 /frontend       → React app (Member 3)
 /backend        → Node/Express API (Member 3)
 /ai-service     → FastAPI + YOLOv8n (Member 2)
-/dataset        → dataset sourcing/merge notes (Member 1)
+/dataset        → dataset sourcing/merge notes for 5 YOLOv8 datasets (Member 1)
 /docs           → roadmap & architecture reference
 ```
 
@@ -38,7 +37,7 @@ Dashboard & Analytics (Recharts)
 
 | Member | Responsibilities | Tech |
 |---|---|---|
-| 1 — Data & Research Lead | Literature review, sourcing & merging TACO + Roboflow beach aggregation + Lebanese University set, class remapping, annotation cleanup | Roboflow, OpenCV, LabelImg, TACO |
+| 1 — Data & Research Lead | Literature review, sourcing & merging 5 YOLOv8 datasets (`TACO- Object Detection.v5-raw-images-alltrash.yolov8`, `beach-garbage-detection.v21i.yolov8`, `ecotide.v1-ecotide.yolov8`, `beach litter.v1i.yolov8`, `aluminum can.v10i.yolov8`), class remapping, annotation cleanup | Roboflow, OpenCV, LabelImg, YOLOv8 |
 | 2 — AI/ML Engineer | Train `yolov8n`, optimize for CPU inference, build `/detect` endpoint, severity/score logic, evaluation | Python, PyTorch, YOLOv8, FastAPI |
 | 3 — Full Stack Engineer | React frontend, Node/Express API, Supabase integration, deployment | React, Node.js, Express, Supabase, Recharts |
 

@@ -29,13 +29,15 @@ Dashboard & Analytics (Recharts)
 
 The project targets **beach/coastal litter** specifically, not generic curbside trash, so the source images need to reflect that setting.
 
-| Source | Role | Notes |
+| Source Package | Role | Notes |
 |---|---|---|
-| **TACO** (Trash Annotations in Context) | Base dataset | Most widely cited litter-detection dataset; many images shot in outdoor/coastal scenes; existing YOLOv8-ready conversions available, so no need to redo annotation work from scratch |
-| **Roboflow "beach" aggregation** (`new-workspace-iyutw/beach-dpf2n`) | Supplementary | Pre-combines TACO with separate Trash Detection and Plastic Waste Detection sets — saves manual merging |
-| **Lebanese University "test beach" set** | Supplementary, real coastal imagery | Small (89 images) but directly beach-context, with classes overlapping bottle/can/bag/wrapper |
+| `TACO- Object Detection.v5-raw-images-alltrash.yolov8` | Base dataset | Raw trash annotations in context |
+| `beach-garbage-detection.v21i.yolov8` | Supplementary | Beach and coastal garbage imagery |
+| `ecotide.v1-ecotide.yolov8` | Supplementary | Marine & coastal debris annotations |
+| `beach litter.v1i.yolov8` | Supplementary | Dedicated beach litter detection set |
+| `aluminum can.v10i.yolov8` | Supplementary | Focused aluminum beverage can detection set |
 
-**Workflow**: pull all three into one Roboflow Universe project → use Roboflow's class-remap tool to collapse the many fine-grained labels (e.g. "Clear plastic bottle," "Drink can," "Garbage bag," "Crisp packet") down into the four target classes (**bottle, can, bag, wrapper**) → check class balance and backfill underrepresented classes if needed → export as a single dataset in YOLOv8 format (train/val/test split handled by Roboflow).
+**Workflow**: pull all five sources into one Roboflow Universe project → use Roboflow's class-remap tool to collapse fine-grained labels (e.g. "Clear plastic bottle", "Drink can", "Garbage bag", "Crisp packet") down into the four target classes (**bottle, can, bag, wrapper**) → check class balance and backfill underrepresented classes if needed → export as a single dataset in YOLOv8 format (train/val/test split handled by Roboflow).
 
 Two beach-specific academic datasets exist (BePLi Dataset v1 — 3,709 Japan coastal images, COCO segmentation format; Beach-Litter-UAV — drone imagery for tiny objects) but both need format conversion or don't match a handheld-camera use case, so they're optional citations for the literature review rather than core training data.
 
@@ -85,7 +87,7 @@ Two beach-specific academic datasets exist (BePLi Dataset v1 — 3,709 Japan coa
 
 | Member | Responsibilities | Tech |
 |---|---|---|
-| **1 — Data & Research Lead** | Literature review, sourcing & merging TACO + Roboflow beach aggregation + Lebanese University set, class remapping (bottle/can/bag/wrapper), annotation cleanup, documentation, test datasets | Roboflow, OpenCV, LabelImg, TACO, research papers |
+| **1 — Data & Research Lead** | Literature review, sourcing & merging 5 YOLOv8 dataset packages (`TACO- Object Detection.v5-raw-images-alltrash.yolov8`, `beach-garbage-detection.v21i.yolov8`, `ecotide.v1-ecotide.yolov8`, `beach litter.v1i.yolov8`, `aluminum can.v10i.yolov8`), class remapping (bottle/can/bag/wrapper), annotation cleanup, documentation, test datasets | Roboflow, OpenCV, LabelImg, YOLOv8, research papers |
 | **2 — AI/ML Engineer** | Train `yolov8m`, optimize for inference, build `/detect` endpoint, compute severity/score logic, evaluation | Python, PyTorch, YOLOv8 (medium), FastAPI |
 | **3 — Full Stack Engineer** | React frontend, Node/Express API (storage upload, persistence, auth), Supabase integration, deployment | React, Node.js, Express, Supabase, Recharts |
 
@@ -117,7 +119,7 @@ Two beach-specific academic datasets exist (BePLi Dataset v1 — 3,709 Japan coa
 
 | Week | Deliverable |
 |---|---|
-| 1–2 | Literature review; source & merge TACO + Roboflow beach aggregation + Lebanese University set; class-remap to bottle/can/bag/wrapper; export YOLOv8-format dataset; repo scaffolding for all three services; Supabase project + schema created |
+| 1–2 | Literature review; source & merge 5 YOLOv8 dataset packages; class-remap to bottle/can/bag/wrapper; export YOLOv8-format dataset; repo scaffolding for all three services; Supabase project + schema created |
 | 3 | Dataset balance check & backfill if needed; `yolov8n` training pipeline running; Node/Express skeleton with `/api/analyze` stub; FastAPI skeleton with `/detect` stub |
 | 4 | **End-to-end flow working**: React upload → Node → FastAPI inference → detection JSON shown in React (no persistence yet) |
 | 5 | Add Supabase Storage upload + Postgres persistence in Node; severity/score logic finalized in FastAPI; error handling (bad image, no detections, timeouts) |
