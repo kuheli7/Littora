@@ -5,7 +5,7 @@ Detects waste items (bottle, can, bag, wrapper) in beach/coastal images using YO
 ## Architecture
 
 ```
-React Frontend
+React Frontend -
       │  (upload image, view dashboard)
       ▼
 Node.js / Express API
