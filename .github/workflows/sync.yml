@@ -2,20 +2,35 @@ name: Sync Fork
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Runs automatically every day at midnight UTC
-  workflow_dispatch: # Allows you to manually trigger it anytime from GitHub UI
+    - cron: "0 0 * * *" # Every day at 00:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   sync:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout target repo
-        uses: actions/checkout@v4
 
-      - name: Sync upstream changes
-        uses: a2ren/fork-sync@v1.0.0
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          upstream_repository: saurabhburnwal/Littora
-          target_branch: main
-          upstream_branch: main
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream
+        run: |
+          git remote add upstream https://github.com/saurabhburnwal/Littora.git
+          git fetch upstream
+
+      - name: Sync main branch
+        run: |
+          git checkout main
+          git merge upstream/main --no-edit
+          git push origin main
