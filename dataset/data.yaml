@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 4
+names: ['bag', 'bottle', 'can', 'wrapper']
+
+roboflow:
+  workspace: kuhelis-workspace-kt5yi
+  project: littora-beach-waste-1
+  version: 2
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/kuhelis-workspace-kt5yi/littora-beach-waste-1/dataset/2

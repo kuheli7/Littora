@@ -1,109 +1,111 @@
 import { Link } from "react-router-dom";
-import { Brain, BarChart3, MapPin, Leaf, TrendingUp, ArrowUpRight } from "lucide-react";
+import { ArrowRight, BarChart3, ScanLine, TrendingUp, Leaf, LogIn } from "lucide-react";
 import { useStats } from "../context/StatsContext.jsx";
 import StatCards          from "../components/StatCards.jsx";
 import TrendChart         from "../components/TrendChart.jsx";
 import WasteBreakdownChart from "../components/WasteBreakdownChart.jsx";
-import beachHero          from "../assets/beach-hero.jpg";
-
-const FEATURES = [
-  {
-    icon: <Brain size={18} />,
-    title: "AI Detection",
-    desc: "Identify waste from images using advanced AI",
-  },
-  {
-    icon: <BarChart3 size={18} />,
-    title: "Data Insights",
-    desc: "Get meaningful insights and trends from waste data",
-  },
-  {
-    icon: <MapPin size={18} />,
-    title: "Beach Monitoring",
-    desc: "Monitor pollution levels across beaches with interactive maps",
-  },
-  {
-    icon: <Leaf size={18} />,
-    title: "Take Action",
-    desc: "Plan clean-ups and make a real impact on our environment",
-  },
-];
+import dashboardBg        from "../assets/dashboard_bg.png";
 
 export default function DashboardPage() {
   const { stats } = useStats();
 
+  const scrollToStats = () => {
+    const el = document.getElementById("analytics-section");
+    if (el) el.scrollIntoView({ behavior: "smooth" });
+  };
+
   return (
-    <div>
-      {/* ── Hero Banner ── */}
+    <div className="dashboard-light-container">
+      {/* ── Hero Banner (Reference Image 1 Aesthetic) ── */}
       <div
-        className="dashboard-hero"
-        style={{ backgroundImage: `url(${beachHero})` }}
+        className="dashboard-hero-light"
+        style={{ backgroundImage: `url(${dashboardBg})` }}
       >
-        <div className="hero-content">
-          <p className="hero-welcome">Welcome to</p>
-          <span className="hero-brand">LITTORA</span>
-          <p className="hero-tagline">
-            AI-Powered Beach Waste Detection for a Cleaner Tomorrow
-          </p>
-
-          <div className="hero-actions">
-            <Link to="/detect" className="btn-primary">
-              Detect Waste
-            </Link>
-            <button className="btn-outline">Explore Dashboard</button>
+        <div className="hero-light-overlay">
+          {/* Top-right overlay action */}
+          <div className="hero-top-actions">
+            <button className="btn-login-overlay">
+              <LogIn size={15} />
+              <span>Login</span>
+            </button>
           </div>
+          <div className="hero-light-main">
+            <h1 className="hero-title-light">
+              AI-Powered<br />
+              <span className="hero-title-accent">Beach Waste</span><br />
+              Detection
+            </h1>
 
-          <div className="hero-feature-cards">
-            {FEATURES.map((f) => (
-              <div key={f.title} className="hero-feature-card">
-                <div className="hero-feature-icon">{f.icon}</div>
-                <div className="hero-feature-title">{f.title}</div>
-                <div className="hero-feature-desc">{f.desc}</div>
+            <p className="hero-subtitle-light">
+              Detect, classify and analyze beach waste for a cleaner tomorrow.
+            </p>
+
+            <div className="hero-cta-row">
+              <Link to="/detect" className="btn-hero-primary-pill">
+                Start Detection <ArrowRight size={18} />
+              </Link>
+              <button onClick={scrollToStats} className="btn-hero-outline-pill">
+                <BarChart3 size={17} /> View Dashboard
+              </button>
+            </div>
+
+            {/* Bottom 3 feature circle cards */}
+            <div className="hero-features-circle-trio">
+              <div className="feature-circle-item">
+                <div className="feature-circle-icon">
+                  <ScanLine size={20} />
+                </div>
+                <div className="feature-circle-text">
+                  <h3>Smart Detection</h3>
+                  <p>AI model detects and classifies waste in beach images</p>
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
 
-        {/* Stats strip at bottom of hero */}
-        <div className="hero-stats-strip">
-          <div className="hero-stat">
-            <span className="hero-stat-value">
-              {(stats.totalAnalyses || 0).toLocaleString()}
-            </span>
-            <span className="hero-stat-label">Images Analyzed</span>
-          </div>
-          <div className="hero-stat">
-            <span className="hero-stat-value">
-              {(stats.totalWasteAllTime || 0).toLocaleString()}
-            </span>
-            <span className="hero-stat-label">Waste Items Detected</span>
-          </div>
-          <div className="hero-stat">
-            <span className="hero-stat-value">
-              {(stats.locations?.length || 0)}
-            </span>
-            <span className="hero-stat-label">Beaches Monitored</span>
-          </div>
-          <div className="hero-stat">
-            <span className="hero-stat-value">{stats.avgScore || '—'}</span>
-            <span className="hero-stat-label">Avg Pollution Score</span>
+              <div className="feature-circle-item">
+                <div className="feature-circle-icon">
+                  <TrendingUp size={20} />
+                </div>
+                <div className="feature-circle-text">
+                  <h3>Real-time Analysis</h3>
+                  <p>Get instant results and insights on waste types and counts</p>
+                </div>
+              </div>
+
+              <div className="feature-circle-item">
+                <div className="feature-circle-icon">
+                  <Leaf size={20} />
+                </div>
+                <div className="feature-circle-text">
+                  <h3>Data for Impact</h3>
+                  <p>Track trends and contribute to a cleaner environment</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ── Stat Cards ── */}
-      <StatCards
-        totalAnalyses={stats.totalAnalyses}
-        totalWasteAllTime={stats.totalWasteAllTime}
-        avgScore={stats.avgScore}
-        severityCounts={stats.severityCounts}
-      />
+      {/* ── Analytics & Monitoring Section ── */}
+      <div id="analytics-section" className="dashboard-light-body">
+        <div className="section-header-badge">
+          <h2>Live Monitoring & Analytics</h2>
+        </div>
 
-      {/* ── Charts ── */}
-      <div className="charts-row">
-        <TrendChart history={stats.history} />
-        <WasteBreakdownChart aggregateDetections={stats.aggregateDetections} />
+        <StatCards
+          totalAnalyses={stats.totalAnalyses}
+          totalWasteAllTime={stats.totalWasteAllTime}
+          avgScore={stats.avgScore}
+          severityCounts={stats.severityCounts}
+        />
+
+        <div className="charts-row">
+          <TrendChart history={stats.history} />
+          <WasteBreakdownChart aggregateDetections={stats.aggregateDetections} />
+        </div>
       </div>
     </div>
   );
 }
+
+
+

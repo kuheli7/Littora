@@ -27,6 +27,9 @@ ai-service/models/*.pt
 dataset/raw/
 dataset/merged/
 dataset/yolo_format/
+dataset/train/
+dataset/valid/
+dataset/test/
 
 # OS / editor
 .DS_Store
