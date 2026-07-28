@@ -1,7 +1,33 @@
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+// ─── Mock supabase BEFORE any other imports ───────────────────────────────────
+vi.mock("../../lib/supabase.js", () => ({
+  supabase: {
+    auth: {
+      getSession: vi.fn().mockResolvedValue({
+        data: {
+          session: {
+            access_token: "mock-token",
+            user: { email: "test@test.com" },
+          },
+        },
+      }),
+      onAuthStateChange: vi.fn().mockReturnValue({
+        data: { subscription: { unsubscribe: vi.fn() } },
+      }),
+      signInWithPassword: vi.fn(),
+      signOut: vi.fn(),
+    },
+  },
+}));
+
+// ─── Mock axios BEFORE any other imports ──────────────────────────────────────
+vi.mock("axios");
+
+import axios from "axios";
+import { AuthProvider } from "../../context/AuthContext.jsx";
 import HistoryPage from "../HistoryPage.jsx";
-import { StatsContext } from "../../context/StatsContext.jsx";
 
 const mockHistoryData = [
   {
@@ -19,7 +45,7 @@ const mockHistoryData = [
     location_label: "Baga Beach, Goa",
     total_waste: 2,
     pollution_score: 5,
-    severity: "low", // mixed case test
+    severity: "low",
     image_url: "https://example.com/photo2.jpg",
   },
   {
@@ -28,7 +54,7 @@ const mockHistoryData = [
     location_label: "Marina Beach, Chennai",
     total_waste: 12,
     pollution_score: 45,
-    severity: "HIGH", // uppercase test
+    severity: "HIGH",
     image_url: "https://example.com/photo3.jpg",
   },
   {
@@ -42,28 +68,41 @@ const mockHistoryData = [
   },
 ];
 
-function renderWithStatsContext(history = mockHistoryData) {
-  const statsValue = {
-    stats: { history },
-    loadStats: vi.fn(),
-  };
+beforeEach(() => {
+  axios.get = vi.fn().mockResolvedValue({ data: mockHistoryData });
+});
 
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+function renderHistoryPage() {
   return render(
-    <StatsContext.Provider value={statsValue}>
+    <AuthProvider>
       <HistoryPage />
-    </StatsContext.Provider>
+    </AuthProvider>
+  );
+}
+
+/** Wait until the loading spinner disappears. */
+async function waitForLoaded() {
+  await waitFor(
+    () => expect(screen.queryByText(/loading your analyses/i)).not.toBeInTheDocument(),
+    { timeout: 5000 }
   );
 }
 
 describe("HistoryPage component & filter functionality", () => {
-  it("renders History page title and initial total count", () => {
-    renderWithStatsContext();
+  it("renders History page title and initial total count", async () => {
+    renderHistoryPage();
     expect(screen.getByRole("heading", { level: 1, name: /history/i })).toBeInTheDocument();
-    expect(screen.getByText(/4 total analyses/i)).toBeInTheDocument();
+    await waitForLoaded();
+    expect(screen.getByText(/4 of your analyses/i)).toBeInTheDocument();
   });
 
-  it("filters analyses correctly when clicking Low severity pill (handles lowercase data)", () => {
-    renderWithStatsContext();
+  it("filters analyses correctly when clicking Low severity pill (handles lowercase data)", async () => {
+    renderHistoryPage();
+    await waitForLoaded();
 
     const lowPill = screen.getByRole("button", { name: /^low$/i });
     fireEvent.click(lowPill);
@@ -73,8 +112,9 @@ describe("HistoryPage component & filter functionality", () => {
     expect(screen.queryByText("Marina Beach, Chennai")).not.toBeInTheDocument();
   });
 
-  it("filters analyses correctly when clicking High severity pill (handles uppercase data)", () => {
-    renderWithStatsContext();
+  it("filters analyses correctly when clicking High severity pill (handles uppercase data)", async () => {
+    renderHistoryPage();
+    await waitForLoaded();
 
     const highPill = screen.getByRole("button", { name: /^high$/i });
     fireEvent.click(highPill);
@@ -84,8 +124,9 @@ describe("HistoryPage component & filter functionality", () => {
     expect(screen.queryByText("Baga Beach, Goa")).not.toBeInTheDocument();
   });
 
-  it("filters analyses by location search input", () => {
-    renderWithStatsContext();
+  it("filters analyses by location search input", async () => {
+    renderHistoryPage();
+    await waitForLoaded();
 
     const searchInput = screen.getByPlaceholderText(/search location or severity/i);
     fireEvent.change(searchInput, { target: { value: "Juhu" } });
@@ -95,8 +136,9 @@ describe("HistoryPage component & filter functionality", () => {
     expect(screen.queryByText("Baga Beach, Goa")).not.toBeInTheDocument();
   });
 
-  it("combines severity pill filter and search input", () => {
-    renderWithStatsContext();
+  it("combines severity pill filter and search input", async () => {
+    renderHistoryPage();
+    await waitForLoaded();
 
     const moderatePill = screen.getByRole("button", { name: /^moderate$/i });
     fireEvent.click(moderatePill);
@@ -108,8 +150,9 @@ describe("HistoryPage component & filter functionality", () => {
     expect(screen.getAllByText("Juhu Beach, Mumbai").length).toBeGreaterThan(0);
   });
 
-  it("displays empty filter state when no matches are found", () => {
-    renderWithStatsContext();
+  it("displays empty filter state when no matches are found", async () => {
+    renderHistoryPage();
+    await waitForLoaded();
 
     const searchInput = screen.getByPlaceholderText(/search location or severity/i);
     fireEvent.change(searchInput, { target: { value: "NonExistentLocation" } });

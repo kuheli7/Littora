@@ -20,7 +20,7 @@ app = FastAPI(title="Beach Waste Detection AI Service")
 # variant — better suited for detecting small or partially occluded beach
 # waste items. Replace with the path to your trained weights once Member 2
 # finishes training on the remapped (bottle/can/bag/wrapper) dataset.
-MODEL_PATH = "models/yolov8m.pt"
+MODEL_PATH = "models/best.pt"
 model = YOLO(MODEL_PATH)
 
 # YOLO class names → our four target classes. If the trained model's

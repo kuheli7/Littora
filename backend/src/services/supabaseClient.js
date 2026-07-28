@@ -41,7 +41,7 @@ export async function uploadImage(buffer, originalName, mimeType) {
 
 /**
  * Inserts an analysis row + one detections row per waste type.
- * Accepts optional latitude, longitude, locationLabel fields.
+ * Accepts optional latitude, longitude, locationLabel, and userId fields.
  * Returns the inserted analysis row (with all generated/defaulted columns).
  */
 export async function saveAnalysis({
@@ -53,6 +53,7 @@ export async function saveAnalysis({
   latitude,
   longitude,
   locationLabel,
+  userId,
 }) {
   const { data: analysis, error: analysisError } = await supabase
     .from("analyses")
@@ -64,6 +65,7 @@ export async function saveAnalysis({
       latitude:        latitude       ?? null,
       longitude:       longitude      ?? null,
       location_label:  locationLabel  ?? null,
+      user_id:         userId         ?? null,
     })
     .select()
     .single();
@@ -84,6 +86,91 @@ export async function saveAnalysis({
   }
 
   return analysis;
+}
+
+/**
+ * Returns past analyses for a specific user (user-scoped gallery).
+ * Includes detection sub-rows for each analysis.
+ */
+export async function listAnalysesByUser(userId, { limit = 100, offset = 0 } = {}) {
+  const { data, error } = await supabase
+    .from("analyses")
+    .select(
+      `id, image_url, created_at, total_waste, pollution_score, severity,
+       latitude, longitude, location_label, user_id,
+       detections ( waste_type, count )`
+    )
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Returns ALL analyses (all users) for the admin dashboard.
+ * Most recent first.
+ */
+export async function listAllAnalysesAdmin() {
+  const { data, error } = await supabase
+    .from("analyses")
+    .select(
+      `id, image_url, created_at, total_waste, pollution_score, severity,
+       latitude, longitude, location_label, user_id,
+       detections ( waste_type, count )`
+    )
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Deletes a single analysis:
+ * 1. Fetches the analysis to get the image_url.
+ * 2. Deletes child detections rows.
+ * 3. Deletes the analysis row.
+ * 4. Removes the image from Supabase Storage.
+ */
+export async function deleteAnalysis(id) {
+  // 1. Fetch the row so we know the image file name
+  const { data: analysis, error: fetchError } = await supabase
+    .from("analyses")
+    .select("id, image_url")
+    .eq("id", id)
+    .single();
+
+  if (fetchError) throw fetchError;
+  if (!analysis) throw new Error(`Analysis ${id} not found`);
+
+  // 2. Delete detections (FK child rows)
+  const { error: detectionsError } = await supabase
+    .from("detections")
+    .delete()
+    .eq("analysis_id", id);
+
+  if (detectionsError) throw detectionsError;
+
+  // 3. Delete the analysis row
+  const { error: analysisError } = await supabase
+    .from("analyses")
+    .delete()
+    .eq("id", id);
+
+  if (analysisError) throw analysisError;
+
+  // 4. Remove from Storage (best-effort — don't fail delete if missing)
+  if (analysis.image_url) {
+    try {
+      // Extract the file name from the public URL
+      const urlParts = analysis.image_url.split("/");
+      const fileName = urlParts[urlParts.length - 1];
+      await supabase.storage.from(BUCKET).remove([fileName]);
+    } catch (storageErr) {
+      console.warn("Storage cleanup warning (non-fatal):", storageErr.message);
+    }
+  }
 }
 
 /**

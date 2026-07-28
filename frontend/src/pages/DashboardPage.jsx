@@ -1,18 +1,24 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, BarChart3, ScanLine, TrendingUp, Leaf, LogIn } from "lucide-react";
 import { useStats } from "../context/StatsContext.jsx";
+import { useAuth }  from "../context/AuthContext.jsx";
 import StatCards          from "../components/StatCards.jsx";
 import TrendChart         from "../components/TrendChart.jsx";
 import WasteBreakdownChart from "../components/WasteBreakdownChart.jsx";
 import dashboardBg        from "../assets/dashboard_bg.png";
 
 export default function DashboardPage() {
-  const { stats } = useStats();
+  const { stats }   = useStats();
+  const { user }    = useAuth();
+  const navigate    = useNavigate();
 
   const scrollToStats = () => {
     const el = document.getElementById("analytics-section");
     if (el) el.scrollIntoView({ behavior: "smooth" });
   };
+
+  // Display initial letter of the logged-in user's email
+  const userInitial = user?.email?.[0]?.toUpperCase() ?? null;
 
   return (
     <div className="dashboard-light-container">
@@ -24,10 +30,22 @@ export default function DashboardPage() {
         <div className="hero-light-overlay">
           {/* Top-right overlay action */}
           <div className="hero-top-actions">
-            <button className="btn-login-overlay">
-              <LogIn size={15} />
-              <span>Login</span>
-            </button>
+            {user ? (
+              /* Logged-in: show user avatar */
+              <div className="hero-user-avatar" title={user.email}>
+                {userInitial}
+              </div>
+            ) : (
+              /* Not logged in: Login button */
+              <button
+                className="btn-login-overlay"
+                onClick={() => navigate("/login")}
+                id="hero-login-btn"
+              >
+                <LogIn size={15} />
+                <span>Login</span>
+              </button>
+            )}
           </div>
           <div className="hero-light-main">
             <h1 className="hero-title-light">
@@ -88,7 +106,7 @@ export default function DashboardPage() {
       {/* ── Analytics & Monitoring Section ── */}
       <div id="analytics-section" className="dashboard-light-body">
         <div className="section-header-badge">
-          <h2>Live Monitoring & Analytics</h2>
+          <h2>Live Monitoring &amp; Analytics</h2>
         </div>
 
         <StatCards
@@ -106,6 +124,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-
-

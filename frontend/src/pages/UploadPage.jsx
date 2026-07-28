@@ -1,14 +1,16 @@
 import { useState } from "react";
 import axios from "axios";
-import { ImageOff, Download } from "lucide-react";
+import { ImageOff } from "lucide-react";
 import { useStats } from "../context/StatsContext.jsx";
+import { useAuth }  from "../context/AuthContext.jsx";
 import UploadForm  from "../components/UploadForm.jsx";
 import ResultPanel from "../components/ResultPanel.jsx";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
 export default function UploadPage() {
-  const { loadStats } = useStats();
+  const { loadStats }  = useStats();
+  const { getToken }   = useAuth();
   const [result,  setResult]  = useState(null);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState(null);
@@ -25,9 +27,12 @@ export default function UploadPage() {
     }
 
     try {
-      const { data } = await axios.post(`${API_BASE}/api/analyze`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      // Attach JWT so the upload is tagged with the current user's id
+      const token = await getToken();
+      const headers = { "Content-Type": "multipart/form-data" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const { data } = await axios.post(`${API_BASE}/api/analyze`, formData, { headers });
       setResult(data);
       loadStats();
     } catch (err) {
