@@ -1,25 +1,37 @@
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard, ScanLine, TrendingUp, MapPin, BarChart3,
-  Clock, FileText, Recycle, Database, Settings, LogOut
+  Clock, FileText, Recycle, Database, Settings, LogOut, Shield
 } from "lucide-react";
+import { useAuth } from "../context/AuthContext.jsx";
 import logo from "../assets/logo.png";
 import navbarImage from "../assets/navbar_image.png";
 
 const NAV_ITEMS = [
-  { to: "/",         label: "Dashboard",                icon: LayoutDashboard, end: true },
-  { to: "/detect",   label: "Detect Waste",             icon: ScanLine,        end: false },
-  { to: "/trends",   label: "Historical Trends",        icon: TrendingUp,      end: false },
-  { to: "/map",      label: "Beach Map",                icon: MapPin,          end: false },
-  { to: "/analytics",label: "Analytics",               icon: BarChart3,       end: false },
-  { to: "/history",  label: "Detection History",       icon: Clock,           end: false },
-  { to: "/reports",  label: "Reports",                  icon: FileText,        end: false },
-  { to: "/cleanup",  label: "Cleanup Recommendations", icon: Recycle,         end: false },
-  { to: "/dataset",  label: "Dataset Explorer",         icon: Database,        end: false },
-  { to: "/settings", label: "Settings",                 icon: Settings,        end: false },
+  { to: "/",          label: "Dashboard",             icon: LayoutDashboard, end: true },
+  { to: "/detect",    label: "Detect Waste",           icon: ScanLine,        end: false },
+  { to: "/trends",    label: "Historical Trends",      icon: TrendingUp,      end: false },
+  { to: "/map",       label: "Beach Map",              icon: MapPin,          end: false },
+  { to: "/analytics", label: "Analytics",              icon: BarChart3,       end: false },
+  { to: "/history",   label: "Detection History",      icon: Clock,           end: false },
+  { to: "/reports",   label: "Reports",                icon: FileText,        end: false },
+  { to: "/cleanup",   label: "Cleanup Recommendations",icon: Recycle,         end: false },
+  { to: "/dataset",   label: "Dataset Explorer",       icon: Database,        end: false },
+  { to: "/settings",  label: "Settings",               icon: Settings,        end: false },
 ];
 
 export default function Sidebar({ isOpen, onClose }) {
+  const { user, logout, isAdmin } = useAuth();
+
+  const handleLogout = async () => {
+    onClose();
+    await logout();
+  };
+
+  // Derive a display name: first part of email or "User"
+  const displayName = user?.email?.split("@")[0] ?? "User";
+  const initial     = displayName[0]?.toUpperCase() ?? "U";
+
   return (
     <>
       {isOpen && (
@@ -36,6 +48,22 @@ export default function Sidebar({ isOpen, onClose }) {
           </div>
         </div>
 
+        {/* User info strip */}
+        {user && (
+          <div className="sidebar-user-strip">
+            <div className="sidebar-user-avatar">{initial}</div>
+            <div className="sidebar-user-info">
+              <div className="sidebar-user-name">{displayName}</div>
+              <div className="sidebar-user-email">{user.email}</div>
+            </div>
+            {isAdmin && (
+              <span className="sidebar-admin-badge" title="Admin">
+                <Shield size={11} />
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Navigation List */}
         <nav className="sidebar-nav" aria-label="Sections">
           {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
@@ -50,6 +78,18 @@ export default function Sidebar({ isOpen, onClose }) {
               <span>{label}</span>
             </NavLink>
           ))}
+
+          {/* Admin link — visible only to admin users */}
+          {isAdmin && (
+            <NavLink
+              to="/admin"
+              className={({ isActive }) => `nav-item nav-item-admin${isActive ? " active" : ""}`}
+              onClick={onClose}
+            >
+              <Shield size={17} strokeWidth={1.8} aria-hidden="true" />
+              <span>Admin Dashboard</span>
+            </NavLink>
+          )}
         </nav>
 
         {/* Bottom Navbar Image Illustration */}
@@ -58,7 +98,7 @@ export default function Sidebar({ isOpen, onClose }) {
         </div>
 
         {/* Logout Button */}
-        <button className="sidebar-logout">
+        <button className="sidebar-logout" onClick={handleLogout}>
           <LogOut size={16} strokeWidth={1.8} />
           <span>Logout</span>
         </button>
@@ -66,6 +106,3 @@ export default function Sidebar({ isOpen, onClose }) {
     </>
   );
 }
-
-
-

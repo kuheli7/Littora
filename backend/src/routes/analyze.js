@@ -9,6 +9,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // POST /api/analyze — multipart/form-data, field name "image"
 // Optional extra fields: latitude, longitude, location_label (all nullable)
+// Optional header: Authorization: Bearer <jwt>  → tags upload with user_id
 router.post("/", upload.single("image"), async (req, res) => {
   if (!req.file) {
     return res
@@ -23,6 +24,20 @@ router.post("/", upload.single("image"), async (req, res) => {
     const latitude      = req.body.latitude      ? parseFloat(req.body.latitude)  : null;
     const longitude     = req.body.longitude     ? parseFloat(req.body.longitude) : null;
     const locationLabel = req.body.location_label || null;
+
+    // Extract user_id from JWT if present (optional — upload works anonymously too)
+    let userId = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith("Bearer ")) {
+      try {
+        const { supabase } = await import("../services/supabaseClient.js");
+        const token = authHeader.slice(7);
+        const { data } = await supabase.auth.getUser(token);
+        userId = data?.user?.id ?? null;
+      } catch {
+        // Non-fatal: upload still proceeds without user attribution
+      }
+    }
 
     // 1. Run inference (stateless call to the AI service)
     const result = await runDetection(buffer, originalname, mimetype);
@@ -40,10 +55,11 @@ router.post("/", upload.single("image"), async (req, res) => {
       latitude,
       longitude,
       locationLabel,
+      userId,
     });
 
     // 4. Return the combined response React expects
-    //    (existing fields unchanged; new location fields added)
+    //    (existing fields unchanged; new location + user fields added)
     res.json({
       id:              analysis.id,
       image_url:       imageUrl,
@@ -55,6 +71,7 @@ router.post("/", upload.single("image"), async (req, res) => {
       latitude:        analysis.latitude,
       longitude:       analysis.longitude,
       location_label:  analysis.location_label,
+      user_id:         analysis.user_id,
     });
   } catch (err) {
     console.error("Analyze failed:", err.message);
