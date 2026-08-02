@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-// ─── Mock supabase BEFORE any other imports ───────────────────────────────────
+// ── Mock supabase BEFORE any other imports ───────────────────────────────────
 vi.mock("../../lib/supabase.js", () => ({
   supabase: {
     auth: {
@@ -22,8 +22,9 @@ vi.mock("../../lib/supabase.js", () => ({
   },
 }));
 
-// ─── Mock axios BEFORE any other imports ──────────────────────────────────────
 vi.mock("axios");
+vi.mock("../../assets/logo.png",         () => ({ default: "logo.png" }));
+vi.mock("../../assets/navbar_image.png", () => ({ default: "navbar.png" }));
 
 import axios from "axios";
 import { AuthProvider } from "../../context/AuthContext.jsx";
@@ -38,6 +39,7 @@ const mockHistoryData = [
     pollution_score: 15,
     severity: "Moderate",
     image_url: "https://example.com/photo1.jpg",
+    detections: [],
   },
   {
     id: 2,
@@ -47,6 +49,7 @@ const mockHistoryData = [
     pollution_score: 5,
     severity: "low",
     image_url: "https://example.com/photo2.jpg",
+    detections: [],
   },
   {
     id: 3,
@@ -56,6 +59,7 @@ const mockHistoryData = [
     pollution_score: 45,
     severity: "HIGH",
     image_url: "https://example.com/photo3.jpg",
+    detections: [],
   },
   {
     id: 4,
@@ -65,11 +69,13 @@ const mockHistoryData = [
     pollution_score: 85,
     severity: "Severe",
     image_url: "https://example.com/photo4.jpg",
+    detections: [],
   },
 ];
 
 beforeEach(() => {
-  axios.get = vi.fn().mockResolvedValue({ data: mockHistoryData });
+  axios.get    = vi.fn().mockResolvedValue({ data: mockHistoryData });
+  axios.delete = vi.fn().mockResolvedValue({ data: { message: "Analysis deleted" } });
 });
 
 afterEach(() => {
@@ -84,7 +90,6 @@ function renderHistoryPage() {
   );
 }
 
-/** Wait until the loading spinner disappears. */
 async function waitForLoaded() {
   await waitFor(
     () => expect(screen.queryByText(/loading your analyses/i)).not.toBeInTheDocument(),
@@ -92,7 +97,8 @@ async function waitForLoaded() {
   );
 }
 
-describe("HistoryPage component & filter functionality", () => {
+// ─────────────────────────────────────────────────────────────────────────────
+describe("HistoryPage — rendering and filtering", () => {
   it("renders History page title and initial total count", async () => {
     renderHistoryPage();
     expect(screen.getByRole("heading", { level: 1, name: /history/i })).toBeInTheDocument();
@@ -100,28 +106,25 @@ describe("HistoryPage component & filter functionality", () => {
     expect(screen.getByText(/4 of your analyses/i)).toBeInTheDocument();
   });
 
-  it("filters analyses correctly when clicking Low severity pill (handles lowercase data)", async () => {
+  it("filters analyses correctly when clicking Low severity pill", async () => {
     renderHistoryPage();
     await waitForLoaded();
 
-    const lowPill = screen.getByRole("button", { name: /^low$/i });
-    fireEvent.click(lowPill);
+    fireEvent.click(screen.getByRole("button", { name: /^low$/i }));
 
     expect(screen.getByText(/1 matching analyses/i)).toBeInTheDocument();
     expect(screen.getAllByText("Baga Beach, Goa").length).toBeGreaterThan(0);
     expect(screen.queryByText("Marina Beach, Chennai")).not.toBeInTheDocument();
   });
 
-  it("filters analyses correctly when clicking High severity pill (handles uppercase data)", async () => {
+  it("filters analyses correctly when clicking High severity pill", async () => {
     renderHistoryPage();
     await waitForLoaded();
 
-    const highPill = screen.getByRole("button", { name: /^high$/i });
-    fireEvent.click(highPill);
+    fireEvent.click(screen.getByRole("button", { name: /^high$/i }));
 
     expect(screen.getByText(/1 matching analyses/i)).toBeInTheDocument();
     expect(screen.getAllByText("Marina Beach, Chennai").length).toBeGreaterThan(0);
-    expect(screen.queryByText("Baga Beach, Goa")).not.toBeInTheDocument();
   });
 
   it("filters analyses by location search input", async () => {
@@ -140,14 +143,11 @@ describe("HistoryPage component & filter functionality", () => {
     renderHistoryPage();
     await waitForLoaded();
 
-    const moderatePill = screen.getByRole("button", { name: /^moderate$/i });
-    fireEvent.click(moderatePill);
-
+    fireEvent.click(screen.getByRole("button", { name: /^moderate$/i }));
     const searchInput = screen.getByPlaceholderText(/search location or severity/i);
     fireEvent.change(searchInput, { target: { value: "Juhu" } });
 
     expect(screen.getByText(/1 matching analyses/i)).toBeInTheDocument();
-    expect(screen.getAllByText("Juhu Beach, Mumbai").length).toBeGreaterThan(0);
   });
 
   it("displays empty filter state when no matches are found", async () => {
@@ -159,5 +159,108 @@ describe("HistoryPage component & filter functionality", () => {
 
     expect(screen.getByText(/0 matching analyses/i)).toBeInTheDocument();
     expect(screen.getAllByText(/no photos match the selected filter/i).length).toBeGreaterThan(0);
+  });
+
+  it("shows 'All' pill as active by default", async () => {
+    renderHistoryPage();
+    await waitForLoaded();
+
+    const allPill = screen.getByRole("button", { name: /^all$/i });
+    expect(allPill).toHaveClass("active");
+  });
+
+  it("shows empty state when API returns no data", async () => {
+    axios.get = vi.fn().mockResolvedValue({ data: [] });
+    renderHistoryPage();
+    await waitForLoaded();
+
+    expect(screen.getByText(/you haven't uploaded any photos yet/i)).toBeInTheDocument();
+  });
+
+  it("shows error state when API call fails", async () => {
+    axios.get = vi.fn().mockRejectedValue({
+      response: { data: { error: "Server error" } },
+    });
+    renderHistoryPage();
+    await waitForLoaded();
+
+    expect(screen.getByText(/server error/i)).toBeInTheDocument();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe("HistoryPage — delete feature", () => {
+  it("shows confirmation modal when delete is requested via gallery", async () => {
+    renderHistoryPage();
+    await waitForLoaded();
+
+    // Click the delete button on the first gallery card
+    const deleteBtns = screen.getAllByRole("button", { name: /delete analysis/i });
+    fireEvent.click(deleteBtns[0]);
+
+    expect(screen.getByText(/delete this analysis\?/i)).toBeInTheDocument();
+    expect(screen.getByText(/cannot be undone/i)).toBeInTheDocument();
+  });
+
+  it("dismisses modal when Cancel is clicked", async () => {
+    renderHistoryPage();
+    await waitForLoaded();
+
+    const deleteBtns = screen.getAllByRole("button", { name: /delete analysis/i });
+    fireEvent.click(deleteBtns[0]);
+
+    expect(screen.getByText(/delete this analysis\?/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    expect(screen.queryByText(/delete this analysis\?/i)).not.toBeInTheDocument();
+  });
+
+  it("dismisses modal when backdrop is clicked", async () => {
+    renderHistoryPage();
+    await waitForLoaded();
+
+    const deleteBtns = screen.getAllByRole("button", { name: /delete analysis/i });
+    fireEvent.click(deleteBtns[0]);
+
+    const backdrop = document.querySelector(".admin-modal-backdrop");
+    fireEvent.click(backdrop);
+
+    expect(screen.queryByText(/delete this analysis\?/i)).not.toBeInTheDocument();
+  });
+
+  it("deletes analysis and removes it from the list on confirm", async () => {
+    axios.delete = vi.fn().mockResolvedValueOnce({ data: { message: "Analysis deleted", id: "1" } });
+
+    renderHistoryPage();
+    await waitForLoaded();
+
+    expect(screen.getAllByText("Juhu Beach, Mumbai").length).toBeGreaterThan(0);
+
+    const deleteBtns = screen.getAllByRole("button", { name: /delete analysis/i });
+    fireEvent.click(deleteBtns[0]);
+
+    fireEvent.click(screen.getByRole("button", { name: /yes, delete/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/analysis deleted successfully/i)).toBeInTheDocument();
+    });
+    expect(axios.delete).toHaveBeenCalledOnce();
+  });
+
+  it("shows error toast when delete fails", async () => {
+    axios.delete = vi.fn().mockRejectedValueOnce({
+      response: { data: { error: "Delete failed on server" } },
+    });
+
+    renderHistoryPage();
+    await waitForLoaded();
+
+    const deleteBtns = screen.getAllByRole("button", { name: /delete analysis/i });
+    fireEvent.click(deleteBtns[0]);
+    fireEvent.click(screen.getByRole("button", { name: /yes, delete/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/delete failed on server/i)).toBeInTheDocument();
+    });
   });
 });

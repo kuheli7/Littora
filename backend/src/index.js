@@ -34,7 +34,11 @@ app.use("/api/my-analyses",  myAnalysesRouter);
 // GET /api/admin/analyses, DELETE /api/admin/analyses/:id (requires admin JWT)
 app.use("/api/admin",        adminRouter);
 
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`Backend API listening on port ${PORT}`);
-});
+export default app;
+
+if (process.env.NODE_ENV !== "test") {
+  const PORT = process.env.PORT || 4000;
+  app.listen(PORT, () => {
+    console.log(`Backend API listening on port ${PORT}`);
+  });
+}

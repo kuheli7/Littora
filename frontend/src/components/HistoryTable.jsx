@@ -153,6 +153,7 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
                   <button
                     style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.2rem' }}
                     title="Delete"
+                    aria-label="Delete analysis"
                     disabled={deletingId === row.id}
                     onClick={() => onDeleteRequest(row.id)}
                   >
