@@ -8,11 +8,10 @@ stateless — it never touches Supabase or the database; Node owns persistence.
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from PIL import Image
-import io
-
 from ultralytics import YOLO
-
 from severity import compute_score
+
+import io
 
 app = FastAPI(title="Beach Waste Detection AI Service")
 

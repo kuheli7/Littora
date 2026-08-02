@@ -25,6 +25,28 @@ export function AuthProvider({ children }) {
   }, []);
 
   /**
+   * Register a new user with email + password.
+   * Supabase sends a confirmation email; if email confirmation is enabled,
+   * the returned user will be unconfirmed until they click the link.
+   * Throws if the email is already registered or on any Supabase error.
+   */
+  const signUp = async (email, password, fullName) => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: fullName?.trim() || "" },
+      },
+    });
+    if (error) throw error;
+    // Supabase returns an empty identities array when the email is already taken
+    if (data.user && data.user.identities?.length === 0) {
+      throw new Error("This email is already registered. Please sign in instead.");
+    }
+    return data;
+  };
+
+  /**
    * Sign in with email + password.
    * Throws on failure (caller should catch and show error).
    */
@@ -53,7 +75,7 @@ export function AuthProvider({ children }) {
   const isAdmin = user?.email === import.meta.env.VITE_ADMIN_EMAIL;
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, isAdmin, getToken }}>
+    <AuthContext.Provider value={{ user, loading, login, signUp, logout, isAdmin, getToken }}>
       {children}
     </AuthContext.Provider>
   );
