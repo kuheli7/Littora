@@ -110,7 +110,8 @@ export async function listAnalysesByUser(userId, { limit = 100, offset = 0 } = {
 
 /**
  * Returns ALL analyses (all users) for the admin dashboard.
- * Most recent first.
+ * Most recent first. Enriches each row with the uploader's email
+ * by batch-fetching user records from Supabase Auth admin API.
  */
 export async function listAllAnalysesAdmin() {
   const { data, error } = await supabase
@@ -123,7 +124,42 @@ export async function listAllAnalysesAdmin() {
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return data;
+
+  // Collect unique user IDs and fetch their emails from Auth
+  const uniqueUserIds = [...new Set(data.map((r) => r.user_id).filter(Boolean))];
+  const emailMap = {};
+  for (const uid of uniqueUserIds) {
+    try {
+      const { data: { user }, error: ue } = await supabase.auth.admin.getUserById(uid);
+      if (!ue && user) emailMap[uid] = user.email ?? null;
+    } catch (_) {
+      // non-fatal — leave email as undefined
+    }
+  }
+
+  return data.map((row) => ({
+    ...row,
+    user_email: row.user_id ? (emailMap[row.user_id] ?? null) : null,
+  }));
+}
+
+/**
+ * Deletes an analysis owned by a specific user.
+ * Throws "Not found or not yours" if the row doesn't exist or belongs to another user.
+ */
+export async function deleteAnalysisForUser(id, userId) {
+  // Verify ownership first
+  const { data: analysis, error: fetchError } = await supabase
+    .from("analyses")
+    .select("id, image_url, user_id")
+    .eq("id", id)
+    .single();
+
+  if (fetchError || !analysis) throw new Error("Not found or not yours");
+  if (analysis.user_id !== userId) throw new Error("Not found or not yours");
+
+  // Reuse the shared delete logic
+  await deleteAnalysis(id);
 }
 
 /**

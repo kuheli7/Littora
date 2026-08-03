@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Download, Eye } from "lucide-react";
+import { Download, Eye, Trash2, Loader2 } from "lucide-react";
 
 const PAGE_SIZE = 10;
 
@@ -8,7 +8,7 @@ const PAGE_SIZE = 10;
  * Filter is now managed by the parent (HistoryPage) and applied before
  * passing data in, so this component only handles sort + pagination.
  */
-export default function HistoryTable({ history }) {
+export default function HistoryTable({ history, showUser = false, onDeleteRequest, deletingId }) {
   const [sortField, setSortField] = useState("date");
   const [sortDir,   setSortDir]   = useState("desc");
   const [page,      setPage]      = useState(0);
@@ -87,6 +87,7 @@ export default function HistoryTable({ history }) {
               Score{sortIcon("score")}
             </th>
             <th>Severity</th>
+            {showUser && <th>User</th>}
             <th>Actions</th>
           </tr>
         </thead>
@@ -129,10 +130,38 @@ export default function HistoryTable({ history }) {
                   {row.severity}
                 </span>
               </td>
-              <td>
+              {showUser && (
+                <td>
+                  <span
+                    className="admin-card-user"
+                    title={row.user_email || row.user_id || "Anonymous"}
+                    style={{ fontSize: "0.75rem" }}
+                  >
+                    👤 {row.user_email
+                      ? row.user_email.split("@")[0]
+                      : row.user_id
+                        ? row.user_id.slice(0, 8) + "…"
+                        : "Anon"}
+                  </span>
+                </td>
+              )}
+              <td style={{ display: "flex", gap: "0.35rem", alignItems: "center" }}>
                 <button style={{ background: 'transparent', border: 'none', color: 'var(--teal)', cursor: 'pointer', padding: '0.2rem' }}>
                   <Eye size={16} />
                 </button>
+                {onDeleteRequest && (
+                  <button
+                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.2rem' }}
+                    title="Delete"
+                    aria-label="Delete analysis"
+                    disabled={deletingId === row.id}
+                    onClick={() => onDeleteRequest(row.id)}
+                  >
+                    {deletingId === row.id
+                      ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} />
+                      : <Trash2 size={15} />}
+                  </button>
+                )}
               </td>
             </tr>
           ))}

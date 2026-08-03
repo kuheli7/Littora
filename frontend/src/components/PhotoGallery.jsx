@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { User, Trash2, Loader2 } from "lucide-react";
 import { X } from "lucide-react";
 import ResultPanel from "./ResultPanel.jsx";
 
@@ -15,7 +16,7 @@ function toResultShape(row) {
   return { ...row, detections };
 }
 
-export default function PhotoGallery({ items }) {
+export default function PhotoGallery({ items, showUser = false, onDeleteRequest, deletingId }) {
   const [modalItem, setModalItem] = useState(null);
 
   if (!items || items.length === 0) {
@@ -42,7 +43,7 @@ export default function PhotoGallery({ items }) {
             onClick={() => setModalItem(row)}
             onKeyDown={(e) => e.key === "Enter" && setModalItem(row)}
           >
-            {/* Thumbnail + severity overlay */}
+            {/* Thumbnail + severity overlay + delete button */}
             <div className="gallery-thumb-wrap">
               {row.image_url ? (
                 <img
@@ -59,6 +60,21 @@ export default function PhotoGallery({ items }) {
               >
                 {row.severity}
               </span>
+              {/* Delete button — only shown when onDeleteRequest is provided */}
+              {onDeleteRequest && (
+                <button
+                  className="gallery-delete-btn"
+                  onClick={(e) => { e.stopPropagation(); onDeleteRequest(row.id); }}
+                  disabled={deletingId === row.id}
+                  title="Delete this analysis"
+                  aria-label="Delete analysis"
+                >
+                  {deletingId === row.id
+                    ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+                    : <Trash2 size={14} />
+                  }
+                </button>
+              )}
             </div>
 
             {/* Card info */}
@@ -77,6 +93,16 @@ export default function PhotoGallery({ items }) {
                   {row.location_label || "—"}
                 </span>
               </div>
+              {showUser && (
+                <div className="gallery-user-chip" title={row.user_email || row.user_id || "Anonymous"}>
+                  <User size={10} />
+                  {row.user_email
+                    ? row.user_email.split("@")[0]
+                    : row.user_id
+                      ? row.user_id.slice(0, 8) + "…"
+                      : "Anon"}
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -112,6 +138,14 @@ export default function PhotoGallery({ items }) {
             )}
 
             <div className="modal-body">
+              {showUser && (modalItem.user_email || modalItem.user_id) && (
+                <div className="admin-card-user" style={{ marginBottom: "0.5rem", fontSize: "0.8rem" }}>
+                  <User size={12} style={{ display: "inline", marginRight: "4px" }} />
+                  Uploaded by: <strong title={modalItem.user_id}>
+                    {modalItem.user_email || (modalItem.user_id?.slice(0, 12) + "…")}
+                  </strong>
+                </div>
+              )}
               <ResultPanel result={toResultShape(modalItem)} />
             </div>
           </div>
