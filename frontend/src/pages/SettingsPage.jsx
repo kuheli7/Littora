@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Sun, Leaf, Waves, Trash2 } from "lucide-react";
+import { Sun, Leaf, Waves } from "lucide-react";
+import { useTheme } from "../context/ThemeContext.jsx";
 
 export default function SettingsPage() {
-  const [theme, setTheme] = useState("earth");
+  const { theme, setTheme } = useTheme();
   const [language, setLanguage] = useState("en");
   const [dateFormat, setDateFormat] = useState("DD MMM YYYY");
   const [itemsPerPage, setItemsPerPage] = useState("10");
@@ -32,13 +33,28 @@ export default function SettingsPage() {
                 <div className="settings-row-desc">Choose your preferred interface theme</div>
               </div>
               <div className="theme-options">
-                <button className={`theme-option${theme === 'light' ? ' active' : ''}`} onClick={() => setTheme('light')}>
+                <button
+                  type="button"
+                  className={`theme-option${theme === 'light' ? ' active' : ''}`}
+                  onClick={() => setTheme('light')}
+                  aria-label="Select Light theme"
+                >
                   <Sun size={14} /> Light
                 </button>
-                <button className={`theme-option${theme === 'earth' ? ' active' : ''}`} onClick={() => setTheme('earth')}>
+                <button
+                  type="button"
+                  className={`theme-option${theme === 'earth' ? ' active' : ''}`}
+                  onClick={() => setTheme('earth')}
+                  aria-label="Select Earth theme"
+                >
                   <Leaf size={14} /> Earth
                 </button>
-                <button className={`theme-option${theme === 'ocean' ? ' active' : ''}`} onClick={() => setTheme('ocean')}>
+                <button
+                  type="button"
+                  className={`theme-option${theme === 'ocean' ? ' active' : ''}`}
+                  onClick={() => setTheme('ocean')}
+                  aria-label="Select Ocean theme"
+                >
                   <Waves size={14} /> Ocean
                 </button>
               </div>
