@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from "react-leaflet";
 import { Layers, Filter, MapPin, AlertCircle, Compass } from "lucide-react";
+import { useTheme } from "../context/ThemeContext.jsx";
 import "leaflet/dist/leaflet.css";
 
 const SEVERITY_COLORS = {
@@ -59,8 +60,28 @@ function AutoFitBounds({ locations }) {
 }
 
 export default function PollutionMap({ locations = [] }) {
-  const [tileMode, setTileMode] = useState("satellite");
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
+
+  // Default to theme-matched tile (Dark Matter for Dark mode, Clean Light for Earth/Light mode)
+  const [tileMode, setTileMode] = useState(() => (isDark ? "dark" : "light"));
   const [filterSeverity, setFilterSeverity] = useState("All");
+
+  // Keep tile mode in sync when user toggles the global app theme
+  useEffect(() => {
+    if (isDark && tileMode === "light") {
+      setTileMode("dark");
+    } else if (!isDark && tileMode === "dark") {
+      setTileMode("light");
+    }
+  }, [isDark, tileMode]);
+
+  // Filter available tiles — Dark Matter exclusive to Dark mode, Clean Light exclusive to Light mode
+  const availableTileKeys = Object.keys(TILE_LAYERS).filter((key) => {
+    if (key === "dark" && !isDark) return false;
+    if (key === "light" && isDark) return false;
+    return true;
+  });
 
   const hasLocations = locations && locations.length > 0;
 
@@ -95,7 +116,7 @@ export default function PollutionMap({ locations = [] }) {
           {/* Tile Layer Selector */}
           <div className="map-tile-switcher">
             <span className="map-tile-label"><Layers size={14} /> Style:</span>
-            {Object.keys(TILE_LAYERS).map((key) => (
+            {availableTileKeys.map((key) => (
               <button
                 key={key}
                 className={`map-tile-btn ${tileMode === key ? "active" : ""}`}
