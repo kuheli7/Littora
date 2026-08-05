@@ -3,10 +3,10 @@ import { useAuth } from "../context/AuthContext.jsx";
 import PollutionMap from "../components/PollutionMap.jsx";
 
 const LEGEND = [
-  { label: "Low",      color: "#2E7D32" },
-  { label: "Moderate", color: "#F9A825" },
-  { label: "High",     color: "#EF6C00" },
-  { label: "Severe",   color: "#C62828" },
+  { label: "Low",      color: "#2f6f5e", desc: "Minimal Risk" },
+  { label: "Moderate", color: "#d97706", desc: "Monitor" },
+  { label: "High",     color: "#ea580c", desc: "Cleanup Priority" },
+  { label: "Severe",   color: "#dc2626", desc: "Urgent Action" },
 ];
 
 export default function MapPage() {
@@ -15,22 +15,22 @@ export default function MapPage() {
 
   return (
     <div className="map-page-container">
-      <div className="map-page-header">
+      <div className="map-page-header" style={{ marginBottom: "1.2rem" }}>
         <h1>Pollution Map</h1>
         <p>
           {isAdmin
-            ? "Admin View — System-wide geolocated hotspots from all users' submitted beach analyses."
-            : "Geolocated hotspots from your submitted beach analyses — attach location on upload to populate this map."
+            ? "Admin View — System-wide geolocated hotspots from all submitted beach waste analyses."
+            : "Geolocated hotspots from your submitted beach waste analyses — attach location on upload to populate this map."
           }
         </p>
       </div>
 
-      <div className="map-legend">
-        <span className="map-legend-label">Severity</span>
+      <div className="map-legend" style={{ marginBottom: "1rem" }}>
+        <span className="map-legend-label">Severity Legend:</span>
         {LEGEND.map((l) => (
           <div key={l.label} className="map-legend-item">
             <div className="legend-dot" style={{ background: l.color }} />
-            <span>{l.label}</span>
+            <span><strong>{l.label}</strong> ({l.desc})</span>
           </div>
         ))}
       </div>
