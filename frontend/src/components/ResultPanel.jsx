@@ -3,12 +3,16 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, Legend,
 } from "recharts";
+import { useTheme } from "../context/ThemeContext.jsx";
 
-// Recyclable: bottle, can — Non-recyclable: bag, wrapper
 const RECYCLABLE_TYPES = new Set(["bottle", "can"]);
-const COLORS = ["#2f6f5e", "#c97b3d", "#a13d3d", "#3d6ea1"];
+
+const PIE_EARTH = ["#0E8C86", "#7BB7D9", "#6A994E", "#C89F65", "#D97757", "#8C6A43", "#A8C686", "#5B8E7D"];
+const PIE_DARK  = ["#00D4AA", "#38BDF8", "#84CC16", "#FBBF24", "#FB7185", "#A78BFA", "#60A5FA", "#F97316"];
 
 export default function ResultPanel({ result }) {
+  const { theme } = useTheme();
+  const colors = theme === "dark" ? PIE_DARK : PIE_EARTH;
   const { detections, total_waste, pollution_score, severity } = result;
 
   const barData = Object.entries(detections).map(([type, count]) => ({
@@ -55,7 +59,7 @@ export default function ResultPanel({ result }) {
               <XAxis dataKey="type" />
               <YAxis allowDecimals={false} />
               <Tooltip />
-              <Bar dataKey="count" fill="#2f6f5e" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="count" fill="var(--teal)" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -72,7 +76,7 @@ export default function ResultPanel({ result }) {
                 label
               >
                 {pieData.map((entry, index) => (
-                  <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
+                  <Cell key={entry.name} fill={colors[index % colors.length]} />
                 ))}
               </Pie>
               <Tooltip />

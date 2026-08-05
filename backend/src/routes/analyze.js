@@ -68,6 +68,7 @@ router.post("/", upload.single("image"), async (req, res) => {
       total_waste:     result.total_waste,
       pollution_score: result.pollution_score,
       severity:        result.severity,
+      boxes:           result.boxes || [],
       latitude:        analysis.latitude,
       longitude:       analysis.longitude,
       location_label:  analysis.location_label,

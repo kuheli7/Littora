@@ -2,21 +2,33 @@ import { createContext, useContext, useState, useEffect, useCallback } from "rea
 import { supabase } from "../lib/supabase.js";
 
 const AuthContext = createContext(null);
-
 export function AuthProvider({ children }) {
   const [user,    setUser]    = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Restore any existing session on mount
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
+      if (session) {
+        sessionStorage.setItem("littora_session_active", "true");
+      } else {
+        sessionStorage.removeItem("littora_session_active");
+      }
+      setLoading(false);
+    }).catch(() => {
+      setUser(null);
       setLoading(false);
     });
 
     // Keep in sync with tab-level auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
+        if (event === "SIGNED_IN" && session) {
+          sessionStorage.setItem("littora_session_active", "true");
+        }
+        if (event === "SIGNED_OUT") {
+          sessionStorage.removeItem("littora_session_active");
+        }
         setUser(session?.user ?? null);
       }
     );
@@ -53,6 +65,7 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
+    sessionStorage.setItem("littora_session_active", "true");
     return data;
   };
 
@@ -60,6 +73,7 @@ export function AuthProvider({ children }) {
    * Sign out and clear local session.
    */
   const logout = async () => {
+    sessionStorage.removeItem("littora_session_active");
     await supabase.auth.signOut();
   };
 

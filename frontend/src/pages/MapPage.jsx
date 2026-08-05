@@ -1,21 +1,28 @@
 import { useStats } from "../context/StatsContext.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import PollutionMap from "../components/PollutionMap.jsx";
 
 const LEGEND = [
-  { label: "Low",      color: "#2f6f5e" },
-  { label: "Moderate", color: "#c97b3d" },
-  { label: "High",     color: "#e07020" },
-  { label: "Severe",   color: "#a13d3d" },
+  { label: "Low",      color: "#2E7D32" },
+  { label: "Moderate", color: "#F9A825" },
+  { label: "High",     color: "#EF6C00" },
+  { label: "Severe",   color: "#C62828" },
 ];
 
 export default function MapPage() {
   const { stats } = useStats();
+  const { isAdmin } = useAuth();
 
   return (
     <div className="map-page-container">
       <div className="map-page-header">
         <h1>Pollution Map</h1>
-        <p>Geolocated hotspots from all submitted beach analyses — allow location access on upload to populate this map.</p>
+        <p>
+          {isAdmin
+            ? "Admin View — System-wide geolocated hotspots from all users' submitted beach analyses."
+            : "Geolocated hotspots from your submitted beach analyses — attach location on upload to populate this map."
+          }
+        </p>
       </div>
 
       <div className="map-legend">

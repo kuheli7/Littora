@@ -1,9 +1,10 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import { StatsProvider } from "./context/StatsContext.jsx";
-import { AuthProvider }  from "./context/AuthContext.jsx";
-import { ThemeProvider } from "./context/ThemeContext.jsx";
+import { StatsProvider }    from "./context/StatsContext.jsx";
+import { AuthProvider }     from "./context/AuthContext.jsx";
+import { ThemeProvider }    from "./context/ThemeContext.jsx";
+import { SettingsProvider } from "./context/SettingsContext.jsx";
 import App from "./App.jsx";
 import "./index.css";
 
@@ -30,11 +31,13 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <BrowserRouter>
       <InviteRedirectHandler>
         <ThemeProvider>
-          <AuthProvider>
-            <StatsProvider>
-              <App />
-            </StatsProvider>
-          </AuthProvider>
+          <SettingsProvider>
+            <AuthProvider>
+              <StatsProvider>
+                <App />
+              </StatsProvider>
+            </AuthProvider>
+          </SettingsProvider>
         </ThemeProvider>
       </InviteRedirectHandler>
     </BrowserRouter>

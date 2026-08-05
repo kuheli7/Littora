@@ -1,5 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Search, ImageOff, Shield, AlertTriangle, Trash2, X, CheckCircle, Loader2 } from "lucide-react";
+import {
+  Search, ImageOff, Shield, AlertTriangle, Trash2, X, CheckCircle,
+  Loader2, RefreshCw, ImageIcon, TrendingUp, BarChart3, Users
+} from "lucide-react";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext.jsx";
 import PhotoGallery from "../components/PhotoGallery.jsx";
@@ -70,6 +73,26 @@ export default function HistoryPage() {
     }
   };
 
+  // Computed admin summary stats
+  const totalWaste = useMemo(
+    () => history.reduce((s, a) => s + (a.total_waste || 0), 0),
+    [history]
+  );
+  const uniqueUsers = useMemo(
+    () => new Set(history.map((a) => a.user_id).filter(Boolean)).size,
+    [history]
+  );
+  const avgScore = useMemo(
+    () =>
+      history.length
+        ? Math.round(
+            history.reduce((s, a) => s + (a.pollution_score || 0), 0) /
+              history.length
+          )
+        : 0,
+    [history]
+  );
+
   // Robust case-insensitive filter
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -77,10 +100,14 @@ export default function HistoryPage() {
       const itemSeverity = (r.severity || "").toString().trim().toLowerCase();
       const matchesSeverity =
         filter === "All" || itemSeverity === filter.toLowerCase();
+      const wasteTypesStr = (r.detections || []).map(d => d.waste_type).join(" ").toLowerCase();
+      const dateStr = r.created_at ? new Date(r.created_at).toLocaleDateString().toLowerCase() : "";
       const matchesSearch =
         !query ||
         (r.location_label && r.location_label.toLowerCase().includes(query)) ||
         (r.severity && r.severity.toLowerCase().includes(query)) ||
+        wasteTypesStr.includes(query) ||
+        dateStr.includes(query) ||
         (isAdmin && r.user_email && r.user_email.toLowerCase().includes(query)) ||
         (isAdmin && r.user_id && r.user_id.toLowerCase().includes(query));
       return matchesSeverity && matchesSearch;
@@ -99,13 +126,24 @@ export default function HistoryPage() {
     <div className="page-container">
       <div className="page-heading">
         {isAdmin ? (
-          <>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-              <Shield size={22} style={{ color: "var(--teal)" }} />
-              <h1 style={{ margin: 0 }}>All Users&apos; History</h1>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                <Shield size={22} style={{ color: "var(--teal)" }} />
+                <h1 style={{ margin: 0 }}>All Users&apos; History &amp; Management</h1>
+              </div>
+              <p style={{ marginTop: "0.2rem" }}>Admin view — system-wide uploads, statistics, and record management.</p>
             </div>
-            <p>Admin view — browsing uploads from <strong>all users</strong>.</p>
-          </>
+            <button
+              className="admin-refresh-btn"
+              onClick={loadAnalyses}
+              disabled={loading}
+              title="Refresh analyses"
+            >
+              <RefreshCw size={15} style={{ animation: loading ? "spin 1s linear infinite" : "none" }} />
+              Refresh
+            </button>
+          </div>
         ) : (
           <>
             <h1>My History</h1>
@@ -113,6 +151,40 @@ export default function HistoryPage() {
           </>
         )}
       </div>
+
+      {/* Admin Summary Stats Bar */}
+      {isAdmin && !loading && !error && history.length > 0 && (
+        <div className="admin-stats-bar" style={{ marginBottom: "1.5rem" }}>
+          <div className="admin-stat-card">
+            <div className="admin-stat-icon"><ImageIcon size={20} /></div>
+            <div>
+              <div className="admin-stat-val">{history.length}</div>
+              <div className="admin-stat-lbl">Total Analyses</div>
+            </div>
+          </div>
+          <div className="admin-stat-card">
+            <div className="admin-stat-icon"><TrendingUp size={20} /></div>
+            <div>
+              <div className="admin-stat-val">{totalWaste.toLocaleString()}</div>
+              <div className="admin-stat-lbl">Total Waste Items</div>
+            </div>
+          </div>
+          <div className="admin-stat-card">
+            <div className="admin-stat-icon"><BarChart3 size={20} /></div>
+            <div>
+              <div className="admin-stat-val">{avgScore}</div>
+              <div className="admin-stat-lbl">Avg Pollution Score</div>
+            </div>
+          </div>
+          <div className="admin-stat-card">
+            <div className="admin-stat-icon"><Users size={20} /></div>
+            <div>
+              <div className="admin-stat-val">{uniqueUsers}</div>
+              <div className="admin-stat-lbl">Unique Contributors</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Loading state */}
       {loading && (

@@ -17,10 +17,11 @@ vi.mock("../../lib/supabase.js", () => ({
 }));
 
 vi.mock("../../assets/logo.png",         () => ({ default: "logo.png" }));
-vi.mock("../../assets/navbar_image.png", () => ({ default: "navbar.png" }));
+vi.mock("../../assets/navbar_image_transparent.png", () => ({ default: "navbar.png" }));
 
 import { supabase } from "../../lib/supabase.js";
 import { AuthProvider, useAuth } from "../../context/AuthContext.jsx";
+import { SettingsProvider } from "../../context/SettingsContext.jsx";
 
 // Convenience references to the mocked fns
 const mockGetSession        = vi.mocked(supabase.auth.getSession);
@@ -43,15 +44,16 @@ function AuthDisplay() {
 
 function renderAuth() {
   return render(
-    <AuthProvider>
+    <SettingsProvider><AuthProvider>
       <AuthDisplay />
-    </AuthProvider>
+    </AuthProvider></SettingsProvider>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe("AuthContext — initial loading", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     mockGetSession.mockReset();
     mockOnAuthStateChange.mockReturnValue({
       data: { subscription: { unsubscribe: vi.fn() } },
@@ -129,7 +131,7 @@ describe("AuthContext — signUp", () => {
       return null;
     }
 
-    render(<AuthProvider><SignUpCaller /></AuthProvider>);
+    render(<SettingsProvider><AuthProvider><SignUpCaller /></AuthProvider></SettingsProvider>);
     await act(async () => {});
 
     await expect(capturedSignUp("a@b.com", "pass123")).rejects.toMatchObject({
@@ -150,7 +152,7 @@ describe("AuthContext — signUp", () => {
       return null;
     }
 
-    render(<AuthProvider><SignUpCaller /></AuthProvider>);
+    render(<SettingsProvider><AuthProvider><SignUpCaller /></AuthProvider></SettingsProvider>);
     await act(async () => {});
 
     await expect(capturedSignUp("dup@b.com", "pass123")).rejects.toThrow(
@@ -169,7 +171,7 @@ describe("AuthContext — signUp", () => {
       return null;
     }
 
-    render(<AuthProvider><SignUpCaller /></AuthProvider>);
+    render(<SettingsProvider><AuthProvider><SignUpCaller /></AuthProvider></SettingsProvider>);
     await act(async () => {});
 
     const result = await capturedSignUp("ok@b.com", "pass123", "Jane");
@@ -204,7 +206,7 @@ describe("AuthContext — login", () => {
       return null;
     }
 
-    render(<AuthProvider><LoginCaller /></AuthProvider>);
+    render(<SettingsProvider><AuthProvider><LoginCaller /></AuthProvider></SettingsProvider>);
     await act(async () => {});
 
     await expect(capturedLogin("u@b.com", "bad")).rejects.toThrow("Invalid credentials");
@@ -221,7 +223,7 @@ describe("AuthContext — login", () => {
       return null;
     }
 
-    render(<AuthProvider><LoginCaller /></AuthProvider>);
+    render(<SettingsProvider><AuthProvider><LoginCaller /></AuthProvider></SettingsProvider>);
     await act(async () => {});
 
     const result = await capturedLogin("u@b.com", "pass123");
@@ -245,7 +247,7 @@ describe("AuthContext — logout", () => {
       return null;
     }
 
-    render(<AuthProvider><LogoutCaller /></AuthProvider>);
+    render(<SettingsProvider><AuthProvider><LogoutCaller /></AuthProvider></SettingsProvider>);
     await act(async () => {});
     await capturedLogout();
 
@@ -268,7 +270,7 @@ describe("AuthContext — getToken", () => {
       return null;
     }
 
-    render(<AuthProvider><TokenCaller /></AuthProvider>);
+    render(<SettingsProvider><AuthProvider><TokenCaller /></AuthProvider></SettingsProvider>);
     await act(async () => {});
 
     const token = await capturedGetToken();
@@ -290,7 +292,7 @@ describe("AuthContext — getToken", () => {
       return null;
     }
 
-    render(<AuthProvider><TokenCaller /></AuthProvider>);
+    render(<SettingsProvider><AuthProvider><TokenCaller /></AuthProvider></SettingsProvider>);
     await act(async () => {});
 
     const token = await capturedGetToken();

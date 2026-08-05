@@ -1,0 +1,65 @@
+# 🤖 Littora AI Service — Python FastAPI + YOLOv8 Inference
+
+The **ai-service** component is a stateless microservice responsible for real-time computer vision inference on uploaded coastal images. It uses a custom-trained **YOLOv8n** model to detect, classify, and score beach litter.
+
+---
+
+## 🌟 Responsibilities
+
+- **🎯 Object Detection**: Classifies waste items into four core categories: `bottle`, `can`, `bag`, `wrapper`.
+- **📐 Bounding Box Output**: Returns normalized bounding boxes (`x_min`, `y_min`, `x_max`, `y_max`) and detection confidence scores.
+- **📈 Pollution Scoring**: Calculates a normalized pollution score (0–100) and severity classification (`Low`, `Moderate`, `High`, `Severe`) based on waste density and category weights.
+- **⚡ Stateless Execution**: Operates purely in-memory; returns JSON inference results without direct database or storage dependencies.
+
+---
+
+## 📁 Directory Structure
+
+```text
+ai-service/
+├── main.py            → FastAPI application & /detect endpoint
+├── best.pt            → Trained YOLOv8 weights (YOLOv8n)
+├── requirements.txt   → PyTorch, Ultralytics, FastAPI, OpenCV, Uvicorn dependencies
+└── README.md
+```
+
+---
+
+## 🚀 Setup & Running
+
+### 1. Create & Activate Virtual Environment
+```bash
+python -m venv venv
+source venv/bin/activate    # On Windows: venv\Scripts\activate
+```
+
+### 2. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Run FastAPI Server
+```bash
+uvicorn main:app --reload --port 8000
+```
+*Service runs on `http://localhost:8000`.*
+
+---
+
+## 🔌 API Endpoint
+
+### `POST /detect`
+- **Content-Type**: `multipart/form-data`
+- **Body**: `file` (image binary)
+- **Response**:
+```json
+{
+  "detections": [
+    { "class": "bottle", "confidence": 0.92, "bbox": [120, 45, 310, 290] },
+    { "class": "can", "confidence": 0.88, "bbox": [400, 180, 510, 320] }
+  ],
+  "total_waste": 2,
+  "pollution_score": 24,
+  "severity": "Low"
+}
+```

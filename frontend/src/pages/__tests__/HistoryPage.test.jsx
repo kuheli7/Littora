@@ -24,10 +24,11 @@ vi.mock("../../lib/supabase.js", () => ({
 
 vi.mock("axios");
 vi.mock("../../assets/logo.png",         () => ({ default: "logo.png" }));
-vi.mock("../../assets/navbar_image.png", () => ({ default: "navbar.png" }));
+vi.mock("../../assets/navbar_image_transparent.png", () => ({ default: "navbar.png" }));
 
 import axios from "axios";
 import { AuthProvider } from "../../context/AuthContext.jsx";
+import { SettingsProvider } from "../../context/SettingsContext.jsx";
 import HistoryPage from "../HistoryPage.jsx";
 
 const mockHistoryData = [
@@ -84,9 +85,9 @@ afterEach(() => {
 
 function renderHistoryPage() {
   return render(
-    <AuthProvider>
+    <SettingsProvider><AuthProvider>
       <HistoryPage />
-    </AuthProvider>
+    </AuthProvider></SettingsProvider>
   );
 }
 

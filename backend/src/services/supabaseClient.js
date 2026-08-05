@@ -236,15 +236,21 @@ export async function listAnalyses({ limit = 50, offset = 0 } = {}) {
  *
  * Aggregation is done in JS after a single DB query — no extra dependencies needed.
  */
-export async function getStats() {
-  const { data, error } = await supabase
+export async function getStats(userId = null) {
+  let query = supabase
     .from("analyses")
     .select(
       `id, image_url, created_at, total_waste, pollution_score, severity,
-       latitude, longitude, location_label,
+       latitude, longitude, location_label, user_id,
        detections ( waste_type, count )`
     )
     .order("created_at", { ascending: true }); // chronological — reversed below for table
+
+  if (userId) {
+    query = query.eq("user_id", userId);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
 

@@ -17,18 +17,19 @@ vi.mock("../../lib/supabase.js", () => ({
 
 import { supabase } from "../../lib/supabase.js";
 import { AuthProvider } from "../../context/AuthContext.jsx";
+import { SettingsProvider } from "../../context/SettingsContext.jsx";
 import LoginPage from "../LoginPage.jsx";
 
 // Mock logo + navbar_image imports (binary assets)
 vi.mock("../../assets/logo.png",       () => ({ default: "logo.png" }));
-vi.mock("../../assets/navbar_image.png", () => ({ default: "navbar.png" }));
+vi.mock("../../assets/navbar_image_transparent.png", () => ({ default: "navbar.png" }));
 
 function renderLogin() {
   return render(
     <MemoryRouter>
-      <AuthProvider>
+      <SettingsProvider><AuthProvider>
         <LoginPage />
-      </AuthProvider>
+      </AuthProvider></SettingsProvider>
     </MemoryRouter>
   );
 }
