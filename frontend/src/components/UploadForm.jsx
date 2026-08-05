@@ -8,7 +8,18 @@ const BEACH_PRESETS = {
   auto:   { label: "📍 Device GPS (Auto-detect)", latitude: null, longitude: null, locationLabel: null },
 };
 
-export default function UploadForm({ onUpload, loading }) {
+const BBOX_COLORS = {
+  bottle:  "#00D4AA",
+  can:     "#F59E0B",
+  bag:     "#A855F7",
+  wrapper: "#F43F5E",
+  glass:   "#38BDF8",
+  foam:    "#EF4444",
+  metal:   "#818CF8",
+  other:   "#9CA3AF",
+};
+
+export default function UploadForm({ onUpload, loading, result, onReset }) {
   const [file,          setFile]          = useState(null);
   const [previewUrl,    setPreviewUrl]    = useState(null);
   const [dragging,      setDragging]      = useState(false);
@@ -21,6 +32,7 @@ export default function UploadForm({ onUpload, loading }) {
     setFile(selected);
     setPreviewUrl(URL.createObjectURL(selected));
     setLocStatus("idle");
+    if (onReset) onReset();
   }
 
   function handleFileChange(e)  { applyFile(e.target.files[0]); }
@@ -71,6 +83,8 @@ export default function UploadForm({ onUpload, loading }) {
     : loading               ? "Analyzing…"
     :                         "Analyze photo";
 
+  const boxes = result?.boxes || [];
+
   return (
     <form className="upload-form" onSubmit={handleSubmit}>
       <label
@@ -81,7 +95,43 @@ export default function UploadForm({ onUpload, loading }) {
         onDrop={handleDrop}
       >
         {previewUrl ? (
-          <img src={previewUrl} alt="Selected beach photo" className="upload-preview" />
+          <div className="upload-preview-container">
+            <img src={previewUrl} alt="Selected beach photo" className="upload-preview" />
+
+            {/* Bounding box overlays */}
+            {boxes.length > 0 && (
+              <div className="bbox-overlay-layer">
+                {boxes.map((b, idx) => {
+                  const norm = b.box_normalized || [0, 0, 0, 0];
+                  const xmin = norm[0] * 100;
+                  const ymin = norm[1] * 100;
+                  const xmax = norm[2] * 100;
+                  const ymax = norm[3] * 100;
+                  const color = BBOX_COLORS[b.class_name?.toLowerCase()] || "#00D4AA";
+                  const label = `${b.class_name} ${(b.confidence * 100).toFixed(0)}%`;
+
+                  return (
+                    <div
+                      key={idx}
+                      className="bbox-box"
+                      style={{
+                        left: `${xmin}%`,
+                        top: `${ymin}%`,
+                        width: `${xmax - xmin}%`,
+                        height: `${ymax - ymin}%`,
+                        borderColor: color,
+                        boxShadow: `0 0 10px ${color}80, inset 0 0 8px ${color}25`,
+                      }}
+                    >
+                      <span className="bbox-label" style={{ backgroundColor: color }}>
+                        {label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         ) : (
           <div className="upload-placeholder">
             <div className="upload-icon-wrap">

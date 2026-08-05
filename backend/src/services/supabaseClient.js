@@ -125,21 +125,26 @@ export async function listAllAnalysesAdmin() {
 
   if (error) throw error;
 
-  // Collect unique user IDs and fetch their emails from Auth
+  // Collect unique user IDs and fetch their emails/names from Auth
   const uniqueUserIds = [...new Set(data.map((r) => r.user_id).filter(Boolean))];
   const emailMap = {};
+  const nameMap = {};
   for (const uid of uniqueUserIds) {
     try {
       const { data: { user }, error: ue } = await supabase.auth.admin.getUserById(uid);
-      if (!ue && user) emailMap[uid] = user.email ?? null;
+      if (!ue && user) {
+        emailMap[uid] = user.email ?? null;
+        nameMap[uid]  = user.user_metadata?.full_name ?? user.email?.split("@")[0] ?? null;
+      }
     } catch (_) {
-      // non-fatal — leave email as undefined
+      // non-fatal — leave email/name as undefined
     }
   }
 
   return data.map((row) => ({
     ...row,
     user_email: row.user_id ? (emailMap[row.user_id] ?? null) : null,
+    user_name:  row.user_id ? (nameMap[row.user_id] ?? null) : null,
   }));
 }
 

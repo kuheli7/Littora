@@ -63,25 +63,41 @@ export default function PollutionMap({ locations = [] }) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
-  // Default to theme-matched tile (Dark Matter for Dark mode, Clean Light for Earth/Light mode)
-  const [tileMode, setTileMode] = useState(() => (isDark ? "dark" : "light"));
-  const [filterSeverity, setFilterSeverity] = useState("All");
-
-  // Keep tile mode in sync when user toggles the global app theme
-  useEffect(() => {
-    if (isDark && tileMode === "light") {
-      setTileMode("dark");
-    } else if (!isDark && tileMode === "dark") {
-      setTileMode("light");
-    }
-  }, [isDark, tileMode]);
-
   // Filter available tiles — Dark Matter exclusive to Dark mode, Clean Light exclusive to Light mode
   const availableTileKeys = Object.keys(TILE_LAYERS).filter((key) => {
     if (key === "dark" && !isDark) return false;
     if (key === "light" && isDark) return false;
     return true;
   });
+
+  // Default to "satellite" for both themes; restore from localStorage if valid
+  const [tileMode, setTileModeState] = useState(() => {
+    const stored = localStorage.getItem("littora_map_tile_mode");
+    if (stored && TILE_LAYERS[stored]) {
+      if (stored === "dark" && !isDark) return "satellite";
+      if (stored === "light" && isDark) return "satellite";
+      return stored;
+    }
+    return "satellite"; // Default for both themes
+  });
+
+  const [filterSeverity, setFilterSeverity] = useState("All");
+
+  const setTileMode = (newMode) => {
+    setTileModeState(newMode);
+    localStorage.setItem("littora_map_tile_mode", newMode);
+  };
+
+  // Keep tile mode compatible when user toggles global app theme
+  useEffect(() => {
+    if (isDark && tileMode === "light") {
+      setTileModeState("dark");
+      localStorage.setItem("littora_map_tile_mode", "dark");
+    } else if (!isDark && tileMode === "dark") {
+      setTileModeState("light");
+      localStorage.setItem("littora_map_tile_mode", "light");
+    }
+  }, [isDark, tileMode]);
 
   const hasLocations = locations && locations.length > 0;
 

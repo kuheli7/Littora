@@ -117,7 +117,14 @@ describe("PhotoGallery — modal", () => {
     render(<PhotoGallery items={mockItems} showUser={true} />);
     fireEvent.click(screen.getAllByRole("button", { name: /analysis from/i })[1]);
     expect(screen.getByText(/uploaded by/i)).toBeInTheDocument();
-    expect(screen.getByText("uploader@test.com")).toBeInTheDocument();
+    expect(screen.getAllByText("uploader").length).toBeGreaterThan(0);
+  });
+
+  it("shows full user_name in modal when present", () => {
+    const itemsWithName = [{ ...mockItems[1], user_name: "Saurabh" }];
+    render(<PhotoGallery items={itemsWithName} showUser={true} />);
+    fireEvent.click(screen.getByRole("button", { name: /analysis from/i }));
+    expect(screen.getAllByText("Saurabh").length).toBeGreaterThan(0);
   });
 });
 
