@@ -67,7 +67,7 @@ export default function App() {
       <Route
         path="/*"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowGuest={true}>
             <AppShell>
               <Routes>
                 <Route path="/"          element={<DashboardPage />} />

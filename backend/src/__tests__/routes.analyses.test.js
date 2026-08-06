@@ -41,7 +41,7 @@ describe("GET /api/analyses", () => {
     const fakeData = [{ id: 1, severity: "Low" }, { id: 2, severity: "High" }];
     mockListAnalyses.mockResolvedValueOnce(fakeData);
 
-    const res = await request(app).get("/api/analyses");
+    const res = await request(app).get("/api/analyses").set("Authorization", "Bearer mock-token");
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual(fakeData);
@@ -49,19 +49,19 @@ describe("GET /api/analyses", () => {
 
   it("passes default limit=50 and offset=0 to service", async () => {
     mockListAnalyses.mockResolvedValueOnce([]);
-    await request(app).get("/api/analyses");
+    await request(app).get("/api/analyses").set("Authorization", "Bearer mock-token");
     expect(mockListAnalyses).toHaveBeenCalledWith({ limit: 50, offset: 0 });
   });
 
   it("passes custom limit and offset query params", async () => {
     mockListAnalyses.mockResolvedValueOnce([]);
-    await request(app).get("/api/analyses?limit=10&offset=20");
+    await request(app).get("/api/analyses?limit=10&offset=20").set("Authorization", "Bearer mock-token");
     expect(mockListAnalyses).toHaveBeenCalledWith({ limit: 10, offset: 20 });
   });
 
   it("returns 500 when listAnalyses throws", async () => {
     mockListAnalyses.mockRejectedValueOnce(new Error("DB error"));
-    const res = await request(app).get("/api/analyses");
+    const res = await request(app).get("/api/analyses").set("Authorization", "Bearer mock-token");
     expect(res.status).toBe(500);
     expect(res.body.error).toMatch(/could not fetch/i);
   });
@@ -71,27 +71,30 @@ describe("GET /api/analyses", () => {
 describe("GET /api/stats", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("returns 200 with stats object", async () => {
-    const fakeStats = {
-      totalAnalyses:    10,
-      totalWasteAllTime: 50,
-      avgScore:         35,
-      severityCounts:   { Low: 4, Moderate: 3, High: 2, Severe: 1 },
-      aggregateDetections: { bottle: 20, can: 15, bag: 10, wrapper: 5 },
-      locations:        [],
-      history:          [],
-    };
-    mockGetStats.mockResolvedValueOnce(fakeStats);
-
+  it("returns 200 with empty guest stats for unauthenticated calls", async () => {
     const res = await request(app).get("/api/stats");
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual(fakeStats);
+    expect(res.body).toEqual({
+      totalAnalyses: 0,
+      totalWasteAllTime: 0,
+      avgScore: 0,
+      severityCounts: { Low: 0, Moderate: 0, High: 0, Severe: 0 },
+      aggregateDetections: { bottle: 0, can: 0, bag: 0, wrapper: 0 },
+      locations: [],
+      history: [],
+      isGuest: true,
+      isAdmin: false,
+    });
   });
 
-  it("returns 500 when getStats throws", async () => {
+  it("returns 500 when getStats throws for authenticated user", async () => {
+    const { supabase } = await import("../services/supabaseClient.js");
+    supabase.auth.getUser = jest.fn().mockResolvedValueOnce({
+      data: { user: { id: "u1", email: "user@test.com" } }
+    });
     mockGetStats.mockRejectedValueOnce(new Error("DB failure"));
-    const res = await request(app).get("/api/stats");
+    const res = await request(app).get("/api/stats").set("Authorization", "Bearer valid-token");
     expect(res.status).toBe(500);
     expect(res.body.error).toMatch(/could not fetch stats/i);
   });

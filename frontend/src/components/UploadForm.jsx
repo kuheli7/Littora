@@ -89,7 +89,7 @@ export default function UploadForm({ onUpload, loading, result, onReset }) {
     <form className="upload-form" onSubmit={handleSubmit}>
       <label
         htmlFor="image-input"
-        className={`upload-label${dragging ? " drag-over" : ""}`}
+        className={`upload-label${previewUrl ? " has-preview" : ""}${dragging ? " drag-over" : ""}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}

@@ -45,20 +45,23 @@ import { AuthProvider } from "../../context/AuthContext.jsx";
 import { SettingsProvider } from "../../context/SettingsContext.jsx";
 import UploadPage from "../UploadPage.jsx";
 
-function renderUploadPage() {
+import { supabase } from "../../lib/supabase.js";
+
+async function renderUploadPage() {
   render(
     <SettingsProvider><AuthProvider>
       <UploadPage />
     </AuthProvider></SettingsProvider>
   );
+  await waitFor(() => expect(supabase.auth.getSession).toHaveBeenCalled());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe("UploadPage", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("renders the page heading and upload + result panels", () => {
-    renderUploadPage();
+  it("renders the page heading and upload + result panels", async () => {
+    await renderUploadPage();
     expect(screen.getByRole("heading", { name: /detect waste/i })).toBeInTheDocument();
     expect(screen.getByTestId("mock-upload-btn")).toBeInTheDocument();
     expect(screen.getByText(/your analysis breakdown and charts will appear/i)).toBeInTheDocument();
@@ -76,7 +79,7 @@ describe("UploadPage", () => {
       },
     });
 
-    renderUploadPage();
+    await renderUploadPage();
     await vi.waitFor(() => screen.getByTestId("mock-upload-btn"));
     fireEvent.click(screen.getByTestId("mock-upload-btn"));
 
@@ -91,7 +94,7 @@ describe("UploadPage", () => {
       response: { data: { error: "AI service unavailable" } },
     });
 
-    renderUploadPage();
+    await renderUploadPage();
     await vi.waitFor(() => screen.getByTestId("mock-upload-btn"));
     fireEvent.click(screen.getByTestId("mock-upload-btn"));
 
@@ -103,7 +106,7 @@ describe("UploadPage", () => {
   it("shows fallback error when error has no response", async () => {
     axios.post = vi.fn().mockRejectedValueOnce(new Error("Network error"));
 
-    renderUploadPage();
+    await renderUploadPage();
     await vi.waitFor(() => screen.getByTestId("mock-upload-btn"));
     fireEvent.click(screen.getByTestId("mock-upload-btn"));
 
@@ -116,7 +119,7 @@ describe("UploadPage", () => {
     let resolve;
     axios.post = vi.fn().mockReturnValueOnce(new Promise((r) => { resolve = r; }));
 
-    renderUploadPage();
+    await renderUploadPage();
     await vi.waitFor(() => screen.getByTestId("mock-upload-btn"));
     fireEvent.click(screen.getByTestId("mock-upload-btn"));
 

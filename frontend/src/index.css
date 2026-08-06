@@ -305,7 +305,7 @@
 }
 
 [data-theme="dark"] .dashboard-hero-light {
-  border-bottom-color: rgba(255,255,255,0.1);
+  border-bottom: none;
 }
 
 [data-theme="dark"] .hero-light-overlay {
@@ -326,7 +326,7 @@
   color: var(--teal);
   background: rgba(0,212,170,0.12);
 }
-[data-theme="dark"] .hero-features-circle-trio { border-top-color: rgba(255,255,255,0.12); }
+[data-theme="dark"] .hero-features-circle-trio { border-top: none; }
 [data-theme="dark"] .btn-hero-outline-pill {
   background: rgba(255,255,255,0.1);
   color: #ffffff;
@@ -707,7 +707,7 @@ body {
   height: auto;
   display: block;
   object-fit: cover;
-  border-top: 1px solid var(--border-lt);
+  border: none;
 }
 
 /* ─── Dashboard Light Hero (Reference Image 1 Aesthetic) ────────── */
@@ -727,7 +727,7 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  border-bottom: 1px solid #e3d6c1;
+  border-bottom: none;
 }
 
 .hero-light-overlay {
@@ -853,7 +853,7 @@ body {
   grid-template-columns: repeat(3, 1fr);
   gap: 2rem;
   padding-top: 1.5rem;
-  border-top: 1px solid rgba(47, 79, 62, 0.15);
+  border-top: none;
 }
 
 .feature-circle-item {
@@ -1176,6 +1176,13 @@ body {
 .upload-label.drag-over {
   border-color: var(--teal);
   background: rgba(47,111,94,0.06);
+}
+
+.upload-label.has-preview {
+  border: none;
+  background: transparent;
+  padding: 0;
+  min-height: auto;
 }
 
 .upload-label:hover { border-color: #b0a48e; }

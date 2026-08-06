@@ -20,6 +20,13 @@ export default function DashboardPage() {
   // Display initial letter of the logged-in user's email
   const userInitial = user?.email?.[0]?.toUpperCase() ?? null;
 
+  const { isAdmin } = useAuth();
+
+  const sectionTitle =
+    isAdmin         ? "Live Monitoring & Analytics (All Users)"
+    : user          ? "Your Personal Beach Waste Analytics"
+    :                 "Platform Overview & Preview Analytics";
+
   return (
     <div className="dashboard-light-container">
       {/* ── Hero Banner (Reference Image 1 Aesthetic) ── */}
@@ -105,8 +112,40 @@ export default function DashboardPage() {
 
       {/* ── Analytics & Monitoring Section ── */}
       <div id="analytics-section" className="dashboard-light-body">
+        {!user && (
+          <div className="guest-preview-banner" style={{
+            background: "linear-gradient(135deg, rgba(47, 111, 94, 0.12) 0%, rgba(212, 146, 75, 0.12) 100%)",
+            border: "1px solid var(--border)",
+            borderRadius: "14px",
+            padding: "1.25rem 1.5rem",
+            marginBottom: "1.5rem",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "1rem"
+          }}>
+            <div>
+              <h4 style={{ margin: "0 0 0.25rem", fontSize: "1rem", fontWeight: 700, color: "var(--ink)" }}>
+                👋 Welcome to Guest Preview Mode
+              </h4>
+              <p style={{ margin: 0, fontSize: "0.86rem", color: "var(--muted)" }}>
+                You are browsing a preview of Littora. Sign in or create an account to record beach waste detections, view your personal statistics, and access reports.
+              </p>
+            </div>
+            <button
+              className="filter-btn-apply"
+              onClick={() => navigate("/login")}
+              style={{ display: "flex", alignItems: "center", gap: "0.4rem", whiteSpace: "nowrap" }}
+            >
+              <LogIn size={15} />
+              Sign In / Register
+            </button>
+          </div>
+        )}
+
         <div className="section-header-badge">
-          <h2>Live Monitoring &amp; Analytics</h2>
+          <h2>{sectionTitle}</h2>
         </div>
 
         <StatCards

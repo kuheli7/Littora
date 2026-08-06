@@ -1,13 +1,13 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, ScanLine, TrendingUp, MapPin, BarChart3,
-  Clock, FileText, Recycle, Database, Settings, LogOut, Shield
+  Clock, FileText, Recycle, Database, Settings, LogOut, Shield, LogIn
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useTheme } from "../context/ThemeContext.jsx";
 import logo from "../assets/logo.png";
-import navbarEarth from "../assets/navbar_image_earth.png";
-import navbarDark from "../assets/navbar_image_dark.png";
+import navbarEarth from "../assets/navbar_image_earth.jpg";
+import navbarDark from "../assets/navbar_image_dark.jpg";
 
 const NAV_ITEMS = [
   { to: "/",          label: "Dashboard",             icon: LayoutDashboard, end: true },
@@ -25,6 +25,7 @@ const NAV_ITEMS = [
 export default function Sidebar({ isOpen, onClose }) {
   const { user, logout, isAdmin } = useAuth();
   const { theme } = useTheme();
+  const navigate = useNavigate();
   const navbarImage = theme === "dark" ? navbarDark : navbarEarth;
 
   const handleLogout = async () => {
@@ -32,9 +33,14 @@ export default function Sidebar({ isOpen, onClose }) {
     await logout();
   };
 
+  const handleSignIn = () => {
+    onClose();
+    navigate("/login");
+  };
+
   // Derive a display name: first part of email or "User"
-  const displayName = user?.email?.split("@")[0] ?? "User";
-  const initial     = displayName[0]?.toUpperCase() ?? "U";
+  const displayName = user ? (user.email?.split("@")[0] ?? "User") : "Guest Visitor";
+  const initial     = user ? (displayName[0]?.toUpperCase() ?? "U") : "G";
 
   return (
     <>
@@ -53,20 +59,18 @@ export default function Sidebar({ isOpen, onClose }) {
         </div>
 
         {/* User info strip */}
-        {user && (
-          <div className="sidebar-user-strip">
-            <div className="sidebar-user-avatar">{initial}</div>
-            <div className="sidebar-user-info">
-              <div className="sidebar-user-name">{displayName}</div>
-              <div className="sidebar-user-email">{user.email}</div>
-            </div>
-            {isAdmin && (
-              <span className="sidebar-admin-badge" title="Admin">
-                <Shield size={11} />
-              </span>
-            )}
+        <div className="sidebar-user-strip">
+          <div className="sidebar-user-avatar">{initial}</div>
+          <div className="sidebar-user-info">
+            <div className="sidebar-user-name">{displayName}</div>
+            <div className="sidebar-user-email">{user ? user.email : "Sign in for full access"}</div>
           </div>
-        )}
+          {user && isAdmin && (
+            <span className="sidebar-admin-badge" title="Admin">
+              <Shield size={11} />
+            </span>
+          )}
+        </div>
 
         {/* Navigation List */}
         <nav className="sidebar-nav" aria-label="Sections">
@@ -89,11 +93,18 @@ export default function Sidebar({ isOpen, onClose }) {
           <img src={navbarImage} alt="Coastal Illustration" className="sidebar-navbar-img" />
         </div>
 
-        {/* Logout Button */}
-        <button className="sidebar-logout" onClick={handleLogout}>
-          <LogOut size={16} strokeWidth={1.8} />
-          <span>Logout</span>
-        </button>
+        {/* Auth / Logout Button */}
+        {user ? (
+          <button className="sidebar-logout" onClick={handleLogout}>
+            <LogOut size={16} strokeWidth={1.8} />
+            <span>Logout</span>
+          </button>
+        ) : (
+          <button className="sidebar-logout" onClick={handleSignIn} style={{ color: "var(--teal)" }}>
+            <LogIn size={16} strokeWidth={1.8} />
+            <span>Sign In</span>
+          </button>
+        )}
       </aside>
     </>
   );
