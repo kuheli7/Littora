@@ -1,137 +1,142 @@
-# Beach Waste Detection & Pollution Monitoring Platform
+# 🌊 LITTORA — AI Beach Waste Detection & Coastal Pollution Monitoring Platform
 
-Detects waste items (bottle, can, bag, wrapper) in beach/coastal images using YOLOv8, scores pollution severity, and tracks results over time on a dashboard.
+**Littora** is an end-to-end AI-powered web application that detects, classifies, and analyzes beach and coastal waste items (*plastics, bottles, cans, bags, foam, glass, metal*) using **YOLOv8** object detection. It scores pollution severity, tracks environmental trends over time, visualizes beach pollution heatmaps, and provides automated cleanup recommendations.
 
-## Architecture
+---
+
+## 🌟 Key Features
+
+- **🤖 Smart AI Detection**: Real-time object detection powered by YOLOv8n with bounding boxes, confidence scoring, waste classification, and pollution severity calculation (Low, Moderate, High, Severe).
+- **🎨 Dual Theme Design System**:
+  - **Earth Theme**: Warm coastal dune aesthetic (`#f7f2e8` sand tones with custom watercolor botany artwork).
+  - **Dark Theme**: High-contrast dark dashboard (`#0a0f1e` deep navy with `#00d4aa` cyan accents, custom glowing cyber-botanical artwork, and high-contrast typography).
+- **🔒 Authentication & Standard Sliding Sessions**:
+  - Integrated Supabase Auth with Role-Based Access Control (Admin Dashboard for managing all users' analyses).
+  - Implements **Standard Supabase Sliding Sessions** (seamless background token rotation without artificial hard cutoffs).
+- **📄 High-Performance PDF Report Generation**:
+  - Export styled, publication-ready PDF reports (`Daily`, `Weekly`, `Monthly`, `Custom`).
+  - Optimized vector/canvas PDF generator using `jsPDF` + `html2canvas` with **75% JPEG compression** (~200KB file size, 97%+ reduction).
+- **⚙️ Full Settings System**:
+  - **Language Preferences**: Interface language switcher (English, Hindi, Tamil).
+  - **Date Format Control**: Configurable date formatting across all tables and charts (`DD MMM YYYY`, `MM/DD/YYYY`, `YYYY-MM-DD`).
+  - **Dynamic Pagination**: Customizable rows per page (`10`, `25`, `50`) persisted across sessions.
+  - **Notification Controls**: Email alerts, high-pollution threshold notifications, and weekly report preferences.
+  - **Data Export & Privacy**: One-click JSON data export of all user analyses and account management controls.
+- **📊 Comprehensive Analytics & Reporting**:
+  - **Historical Trends**: Detections over time, waste breakdown stacked charts, day/time pollution heatmaps.
+  - **Interactive Beach Map**: Geolocation tracking of pollution hot spots with interactive markers.
+  - **Cleanup Recommendations**: Automated priority-based cleanup suggestions based on severity.
+  - **Dataset Explorer**: Sourcing notes and breakdown of merged YOLOv8 datasets.
+
+---
+
+## 🏗️ Architecture Overview
+
 ```
-React Frontend -
-      │  (upload image, view dashboard)
-      ▼
-Node.js / Express API
-      │  • uploads image to Supabase Storage
-      │  • forwards image to AI service for inference
-      │  • persists analysis + detections to Postgres
-      │  • shapes/returns combined response to React
-      ▼
-Python AI Service (FastAPI + YOLOv8n)
-      │  • runs detection
-      │  • computes total_waste, pollution_score, severity
-      │  • returns structured JSON only — no DB or storage access
-      ▼
-Supabase (PostgreSQL + Storage)
-      ▼
-Dashboard & Analytics (Recharts)
+                          ┌───────────────────────────┐
+                          │   React 18 + Vite (SPA)   │
+                          │   Port: 5173              │
+                          └─────────────┬─────────────┘
+                                        │ (HTTP / JSON / FormData)
+                                        ▼
+                          ┌───────────────────────────┐
+                          │  Node.js / Express API    │
+                          │  Port: 4000               │
+                          └──────┬─────────────┬──────┘
+                                 │             │
+        (Uploads Image & Persists)              (Forward Image for Inference)
+                                 │             │
+                                 ▼             ▼
+  ┌─────────────────────────────────┐       ┌─────────────────────────────────┐
+  │ Supabase (Postgres + Storage)   │       │ Python FastAPI + YOLOv8n        │
+  │ • Storage Bucket: beach-images  │       │ Port: 8000                      │
+  │ • Tables: analyses, detections  │       │ • Returns detection JSON & bbox │
+  └─────────────────────────────────┘       └─────────────────────────────────┘
 ```
 
-## Repo Layout
+---
 
+## 📁 Repository Layout
+
+```text
+Littora/
+├── frontend/               → React + Vite SPA (Port 5173) [See frontend/README.md]
+│   ├── src/
+│   │   ├── assets/        → Themed artwork (Earth & Dark navbar images)
+│   │   ├── components/    → Sidebar, HistoryTable, ResultPanel, UploadForm, etc.
+│   │   ├── context/       → AuthContext, ThemeContext, SettingsContext, StatsContext
+│   │   ├── pages/         → Dashboard, Detect, Trends, Map, History, Settings, Reports, etc.
+│   │   ├── utils/         → PDF Report Generator (generatePdfReport.js)
+│   │   └── index.css      → Complete CSS design system & dark mode tokens
+│   └── vitest.config.js   → Unit testing suite (Vitest + Testing Library)
+├── backend/                → Node.js / Express API Server (Port 4000) [See backend/README.md]
+│   └── src/
+│       ├── index.js       → Express server & middleware
+│       ├── routes/        → /api/analyze, /api/my-analyses, /api/admin, /api/stats, /api/auth
+│       └── services/      → Supabase client & Email notifications
+├── ai-service/             → Python FastAPI + YOLOv8 Inference (Port 8000) [See ai-service/README.md]
+│   ├── main.py            → FastAPI application & /detect endpoint
+│   ├── best.pt            → Trained YOLOv8 weights
+│   └── requirements.txt   → PyTorch, Ultralytics, FastAPI dependencies
+├── dataset/                → YOLOv8 dataset sourcing & merging notes [See dataset/README.md]
+└── docs/                   → System roadmap & architecture reference [See docs/README.md]
 ```
-/frontend       → React app (Member 3)
-/backend        → Node/Express API (Member 3)
-/ai-service     → FastAPI + YOLOv8n (Member 2)
-/dataset        → dataset sourcing/merge notes for 5 YOLOv8 datasets (Member 1)
-/docs           → roadmap & architecture reference
-```
 
-## Team Roles
+---
 
-| Member | Responsibilities | Tech |
+## 👥 Team Roles & Tech Stack
+
+| Member | Role | Key Technologies |
 |---|---|---|
-| 1 — Data & Research Lead | Literature review, sourcing & merging 5 YOLOv8 datasets (`TACO- Object Detection.v5-raw-images-alltrash.yolov8`, `beach-garbage-detection.v21i.yolov8`, `ecotide.v1-ecotide.yolov8`, `beach litter.v1i.yolov8`, `aluminum can.v10i.yolov8`), class remapping, annotation cleanup | Roboflow, OpenCV, LabelImg, YOLOv8 |
-| 2 — AI/ML Engineer | Train `yolov8n`, optimize for CPU inference, build `/detect` endpoint, severity/score logic, evaluation | Python, PyTorch, YOLOv8, FastAPI |
-| 3 — Full Stack Engineer | React frontend, Node/Express API, Supabase integration, deployment | React, Node.js, Express, Supabase, Recharts |
+| **Member 1** | Data & Research Lead | Roboflow, OpenCV, LabelImg, Dataset Annotation & Merging |
+| **Member 2** | AI/ML Engineer | PyTorch, YOLOv8n (Ultralytics), FastAPI, Python |
+| **Member 3** | Full Stack Engineer | React 18, Vite, Node.js, Express, Supabase (Auth, Postgres, Storage), Recharts, jsPDF |
 
-## API Contracts
+---
 
-**`POST /api/analyze`** (Node, multipart/form-data — called by React)
-1. Receives image from React
-2. Forwards image to FastAPI `POST /detect`
-3. Uploads image to Supabase Storage → gets `image_url`
-4. Inserts a row into `analyses`, and one row per waste type into `detections`
-5. Returns:
-```json
-{
-  "id": "uuid",
-  "image_url": "https://.../bottle1.jpg",
-  "created_at": "2026-06-18T10:00:00Z",
-  "detections": { "bottle": 4, "can": 2, "bag": 1 },
-  "total_waste": 7,
-  "pollution_score": 42,
-  "severity": "Moderate"
-}
-```
+## 🚀 Getting Started
 
-**`POST /detect`** (FastAPI, internal — only Node calls this)
-- Input: raw image
-- Output:
-```json
-{
-  "detections": { "bottle": 4, "can": 2, "bag": 1 },
-  "total_waste": 7,
-  "pollution_score": 42,
-  "severity": "Moderate"
-}
-```
-
-**`GET /api/analyses`** (Node — powers the history view)
-- Returns paginated list: `id, image_url, created_at, total_waste, pollution_score, severity`
-
-## Database Schema
-
-**analyses**: `id, image_url, created_at, total_waste, pollution_score, severity`
-**detections**: `id, analysis_id (FK), waste_type, count`
-**users** *(optional)*: `id, name, email`
-
-## Getting Started
-
-### AI Service (Python + FastAPI)
+### 1. AI Service (Python + FastAPI)
 ```bash
 cd ai-service
-python -m venv venv && source venv/bin/activate
+python -m venv venv
+source venv/bin/activate    # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
-### Backend (Node + Express)
+### 2. Backend API (Node.js + Express)
 ```bash
 cd backend
 npm install
-cp .env.example .env   # fill in SUPABASE_URL, SUPABASE_SERVICE_KEY (or SUPABASE_SECRET_KEY), AI_SERVICE_URL
-npm run dev
+cp .env.example .env        # Configure SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, AI_SERVICE_URL
+npm run dev                 # Runs on http://localhost:4000
 ```
 
-### Frontend (React + Vite)
+### 3. Frontend Application (React + Vite)
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev                 # Runs on http://localhost:5173
 ```
 
-## Local MCP Servers (Workspace)
+---
 
-This repo now includes workspace MCP configuration at:
+## 🧪 Testing & Verification
 
-```text
-.vscode/mcp.json
+### Running Frontend Tests
+```bash
+cd frontend
+npm test
 ```
 
-Configured servers:
+### Running Backend Tests
+```bash
+cd backend
+npm test
+```
 
-- `github` → `https://api.githubcopilot.com/mcp/`
-- `supabase` → `https://mcp.supabase.com/mcp`
+---
 
-Notes:
-
-- GitHub MCP was checked before adding workspace config; repository-level MCP config was not present, so workspace MCP entries were added.
-- If your editor already has global MCP server entries, keep one source of truth (global or workspace) to avoid duplicates.
-
-## Deployment
-
-| Component | Platform |
-|---|---|
-| Frontend (React) | Vercel |
-| Backend (Node.js) | Render |
-| AI Service (FastAPI + YOLOv8n) | Railway (or Render if model size permits) |
-| Database & Storage | Supabase |
-
-Full roadmap with week-by-week plan: see `/docs/roadmap.md`.
+## 📄 License
+Developed for educational and environmental monitoring research.

@@ -7,8 +7,7 @@ function TestComponent() {
   return (
     <div>
       <span data-testid="current-theme">{theme}</span>
-      <button onClick={() => setTheme("light")}>Set Light</button>
-      <button onClick={() => setTheme("ocean")}>Set Ocean</button>
+      <button onClick={() => setTheme("dark")}>Set Dark</button>
       <button onClick={() => setTheme("earth")}>Set Earth</button>
     </div>
   );
@@ -31,36 +30,22 @@ describe("ThemeContext & ThemeProvider", () => {
     expect(document.documentElement.getAttribute("data-theme")).toBe("earth");
   });
 
-  it("updates theme to 'light' and sets data-theme attribute on html", () => {
+  it("updates theme to 'dark' and sets data-theme attribute on html", () => {
     render(
       <ThemeProvider>
         <TestComponent />
       </ThemeProvider>
     );
 
-    fireEvent.click(screen.getByText("Set Light"));
+    fireEvent.click(screen.getByText("Set Dark"));
 
-    expect(screen.getByTestId("current-theme").textContent).toBe("light");
-    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
-    expect(localStorage.getItem("littora_theme")).toBe("light");
-  });
-
-  it("updates theme to 'ocean' and sets data-theme attribute on html", () => {
-    render(
-      <ThemeProvider>
-        <TestComponent />
-      </ThemeProvider>
-    );
-
-    fireEvent.click(screen.getByText("Set Ocean"));
-
-    expect(screen.getByTestId("current-theme").textContent).toBe("ocean");
-    expect(document.documentElement.getAttribute("data-theme")).toBe("ocean");
-    expect(localStorage.getItem("littora_theme")).toBe("ocean");
+    expect(screen.getByTestId("current-theme").textContent).toBe("dark");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    expect(localStorage.getItem("littora_theme")).toBe("dark");
   });
 
   it("restores theme from localStorage on initial render", () => {
-    localStorage.setItem("littora_theme", "ocean");
+    localStorage.setItem("littora_theme", "dark");
 
     render(
       <ThemeProvider>
@@ -68,7 +53,7 @@ describe("ThemeContext & ThemeProvider", () => {
       </ThemeProvider>
     );
 
-    expect(screen.getByTestId("current-theme").textContent).toBe("ocean");
-    expect(document.documentElement.getAttribute("data-theme")).toBe("ocean");
+    expect(screen.getByTestId("current-theme").textContent).toBe("dark");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
   });
 });

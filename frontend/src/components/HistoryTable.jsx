@@ -1,17 +1,38 @@
 import { useState, useMemo, useEffect } from "react";
-import { Download, Eye, Trash2, Loader2 } from "lucide-react";
+import { Download, Eye, Trash2, Loader2, X, User } from "lucide-react";
+import ResultPanel from "./ResultPanel.jsx";
 
 const PAGE_SIZE = 10;
+
+function toResultShape(item) {
+  if (!item) return { detections: {}, total_waste: 0, pollution_score: 0, severity: "Low" };
+  const detections = {};
+  if (Array.isArray(item.detections)) {
+    for (const d of item.detections) {
+      detections[d.waste_type || d.type] = d.count;
+    }
+  } else if (item.detections && typeof item.detections === "object") {
+    Object.assign(detections, item.detections);
+  }
+  return {
+    detections,
+    total_waste: item.total_waste || 0,
+    pollution_score: item.pollution_score || 0,
+    severity: item.severity || "Low",
+    boxes: item.boxes || [],
+  };
+}
 
 /**
  * HistoryTable — sortable + paginated table of analyses.
  * Filter is now managed by the parent (HistoryPage) and applied before
  * passing data in, so this component only handles sort + pagination.
  */
-export default function HistoryTable({ history, showUser = false, onDeleteRequest, deletingId }) {
+export default function HistoryTable({ history, showUser = false, onDeleteRequest, deletingId, onViewRequest }) {
   const [sortField, setSortField] = useState("date");
   const [sortDir,   setSortDir]   = useState("desc");
   const [page,      setPage]      = useState(0);
+  const [selectedRow, setSelectedRow] = useState(null);
 
   useEffect(() => {
     setPage(0);
@@ -88,7 +109,7 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
             </th>
             <th>Severity</th>
             {showUser && <th>User</th>}
-            <th>Actions</th>
+            <th className="th-actions">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -134,34 +155,41 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
                 <td>
                   <span
                     className="admin-card-user"
-                    title={row.user_email || row.user_id || "Anonymous"}
-                    style={{ fontSize: "0.75rem" }}
+                    title={row.user_name ? `${row.user_name} (${row.user_email || ""})` : (row.user_email || row.user_id || "Anonymous")}
+                    style={{ fontSize: "0.78rem", fontWeight: 600 }}
                   >
-                    👤 {row.user_email
+                    👤 {row.user_name || (row.user_email
                       ? row.user_email.split("@")[0]
                       : row.user_id
                         ? row.user_id.slice(0, 8) + "…"
-                        : "Anon"}
+                        : "Anon")}
                   </span>
                 </td>
               )}
-              <td style={{ display: "flex", gap: "0.35rem", alignItems: "center" }}>
-                <button style={{ background: 'transparent', border: 'none', color: 'var(--teal)', cursor: 'pointer', padding: '0.2rem' }}>
-                  <Eye size={16} />
-                </button>
-                {onDeleteRequest && (
+              <td className="td-actions">
+                <div className="action-buttons-cell">
                   <button
-                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.2rem' }}
-                    title="Delete"
-                    aria-label="Delete analysis"
-                    disabled={deletingId === row.id}
-                    onClick={() => onDeleteRequest(row.id)}
+                    className="action-btn action-view"
+                    title="View analysis detail"
+                    aria-label="View analysis detail"
+                    onClick={() => onViewRequest ? onViewRequest(row) : setSelectedRow(row)}
                   >
-                    {deletingId === row.id
-                      ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} />
-                      : <Trash2 size={15} />}
+                    <Eye size={16} />
                   </button>
-                )}
+                  {onDeleteRequest && (
+                    <button
+                      className="action-btn action-delete"
+                      title="Delete analysis"
+                      aria-label="Delete analysis"
+                      disabled={deletingId === row.id}
+                      onClick={() => onDeleteRequest(row.id)}
+                    >
+                      {deletingId === row.id
+                        ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} />
+                        : <Trash2 size={15} />}
+                    </button>
+                  )}
+                </div>
               </td>
             </tr>
           ))}
@@ -189,6 +217,50 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
           >
             Next →
           </button>
+        </div>
+      )}
+
+      {/* ── Detail Modal Preview ── */}
+      {selectedRow && (
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Photo analysis detail"
+          onClick={() => setSelectedRow(null)}
+        >
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="modal-close"
+              onClick={() => setSelectedRow(null)}
+              aria-label="Close"
+            >
+              <X size={16} />
+            </button>
+
+            {selectedRow.image_url && (
+              <img
+                src={selectedRow.image_url}
+                alt="Full-size beach analysis"
+                className="modal-img"
+              />
+            )}
+
+            <div className="modal-body">
+              {showUser && (selectedRow.user_name || selectedRow.user_email || selectedRow.user_id) && (
+                <div className="admin-card-user" style={{ marginBottom: "0.5rem", fontSize: "0.85rem" }}>
+                  <User size={14} style={{ display: "inline", marginRight: "4px" }} />
+                  Uploaded by: <strong title={selectedRow.user_email || selectedRow.user_id}>
+                    {selectedRow.user_name || (selectedRow.user_email ? selectedRow.user_email.split("@")[0] : (selectedRow.user_id?.slice(0, 12) + "…"))}
+                  </strong>
+                </div>
+              )}
+              <ResultPanel result={toResultShape(selectedRow)} />
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -22,8 +22,9 @@ export default function UploadPage() {
     const formData = new FormData();
     formData.append("image", file);
     if (coords) {
-      formData.append("latitude",  coords.latitude);
-      formData.append("longitude", coords.longitude);
+      if (coords.latitude)  formData.append("latitude",  coords.latitude);
+      if (coords.longitude) formData.append("longitude", coords.longitude);
+      if (coords.locationLabel) formData.append("location_label", coords.locationLabel);
     }
 
     try {
@@ -52,11 +53,16 @@ export default function UploadPage() {
       </div>
 
       <div className="upload-layout">
-        {/* Left — upload form */}
+        {/* Left — upload form & feature image with bounding boxes */}
         <div className="upload-pane">
           <div className="upload-card">
-            <div className="upload-card-title">Upload Image</div>
-            <UploadForm onUpload={handleUpload} loading={loading} />
+            <div className="upload-card-title">Upload &amp; Detection View</div>
+            <UploadForm
+              onUpload={handleUpload}
+              loading={loading}
+              result={result}
+              onReset={() => setResult(null)}
+            />
             {error && (
               <p className="error" style={{ marginTop: "0.85rem" }}>
                 ⚠️ {error}
@@ -65,16 +71,16 @@ export default function UploadPage() {
           </div>
         </div>
 
-        {/* Right — result */}
+        {/* Right — result statistics & charts */}
         <div>
           <div className="upload-card">
-            <div className="upload-card-title">Detection Result</div>
+            <div className="upload-card-title">Detection Result &amp; Analytics</div>
             {result ? (
               <ResultPanel result={result} />
             ) : (
               <div className="result-placeholder" style={{ boxShadow: 'none', background: 'transparent', padding: '3rem 1rem' }}>
                 <ImageOff size={44} strokeWidth={1.4} />
-                <p>Your analysis results will appear here after you upload and analyze a photo.</p>
+                <p>Your analysis breakdown and charts will appear here after you upload and analyze a photo.</p>
               </div>
             )}
           </div>

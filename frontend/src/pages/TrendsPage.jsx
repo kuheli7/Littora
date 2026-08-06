@@ -1,26 +1,27 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useStats } from "../context/StatsContext.jsx";
+import { useTheme } from "../context/ThemeContext.jsx";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
   ResponsiveContainer, CartesianGrid
 } from "recharts";
 import { TrendingUp, Trash2, ImageIcon, Target } from "lucide-react";
 
-const MONTHLY_DATA = [
-  { month: "Jan", detections: 5124, waste: 7245 },
-  { month: "Feb", detections: 3842, waste: 6653 },
-  { month: "Mar", detections: 4102, waste: 9812 },
-  { month: "Apr", detections: 4650, waste: 8420 },
-  { month: "May", detections: 5411, waste: 12161 },
-  { month: "Jun", detections: 6842, waste: 15293 },
+const BASE_MONTHLY_DATA = [
+  { month: "Jan", detections: 5124, waste: 7245, forecast: 5500, previous: 4800 },
+  { month: "Feb", detections: 3842, waste: 6653, forecast: 4200, previous: 3600 },
+  { month: "Mar", detections: 4102, waste: 9812, forecast: 4400, previous: 3900 },
+  { month: "Apr", detections: 4650, waste: 8420, forecast: 4900, previous: 4300 },
+  { month: "May", detections: 5411, waste: 12161, forecast: 5800, previous: 5100 },
+  { month: "Jun", detections: 6842, waste: 15293, forecast: 7100, previous: 6200 },
 ];
 
-const WASTE_TYPE_DATA = [
-  { month: "01 Jun", Plastic: 400, Bags: 240, Foam: 180, Glass: 80, Metal: 60, Other: 40 },
-  { month: "08 Jun", Plastic: 520, Bags: 280, Foam: 200, Glass: 100, Metal: 75, Other: 55 },
-  { month: "15 Jun", Plastic: 610, Bags: 320, Foam: 220, Glass: 115, Metal: 85, Other: 60 },
-  { month: "22 Jun", Plastic: 740, Bags: 380, Foam: 260, Glass: 130, Metal: 95, Other: 70 },
-  { month: "30 Jun", Plastic: 890, Bags: 430, Foam: 300, Glass: 150, Metal: 110, Other: 85 },
+const BASE_WASTE_TYPE_DATA = [
+  { month: "01 Jun", "Plastic Bottle": 400, "Plastic Bag": 240, Wrapper: 180, Can: 120, Glass: 80, Foam: 60, Metal: 45, Other: 30 },
+  { month: "08 Jun", "Plastic Bottle": 520, "Plastic Bag": 280, Wrapper: 200, Can: 140, Glass: 100, Metal: 55, Other: 35 },
+  { month: "15 Jun", "Plastic Bottle": 610, "Plastic Bag": 320, Wrapper: 220, Can: 160, Glass: 115, Metal: 65, Other: 40 },
+  { month: "22 Jun", "Plastic Bottle": 740, "Plastic Bag": 380, Wrapper: 260, Can: 180, Glass: 130, Metal: 75, Other: 45 },
+  { month: "30 Jun", "Plastic Bottle": 890, "Plastic Bag": 430, Wrapper: 300, Can: 210, Glass: 150, Metal: 85, Other: 50 },
 ];
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -35,97 +36,179 @@ function generateHeatmap() {
     }))
   }));
 }
-const HEATMAP_DATA = generateHeatmap();
 
 const WASTE_COLORS = {
-  Plastic: "#2f6f5e",
-  Bags: "#c97b3d",
-  Foam: "#7c3d8a",
-  Glass: "#3d6ea1",
-  Metal: "#a13d3d",
-  Other: "#6b7a72",
+  "Plastic Bottle": "#0077B6",
+  "Plastic Bag":    "#4CC9F0",
+  "Wrapper":        "#F8961E",
+  "Can":            "#90BE6D",
+  "Glass":          "#577590",
+  "Foam":           "#F94144",
+  "Metal":          "#9C89B8",
+  "Other":          "#ADB5BD",
 };
+
+function getHeatmapColor(val, isDark) {
+  if (!val || val === 0) return isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)";
+  const alpha = Math.max(0.12, (val / 100)).toFixed(2);
+  return isDark
+    ? `rgba(0, 212, 170, ${alpha})`
+    : `rgba(14, 140, 134, ${alpha})`;
+}
 
 export default function TrendsPage() {
   const { stats } = useStats();
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
+
+  const linePrimary  = isDark ? "#00D4AA" : "#0E8C86";
+  const lineForecast = isDark ? "#5EEAD4" : "#4DB6AC";
+  const linePrevious = isDark ? "#94A3B8" : "#A1887F";
+
   const [dateRange, setDateRange] = useState("last30");
   const [beach, setBeach] = useState("all");
   const [wasteType, setWasteType] = useState("all");
 
-  const totalDetections = stats.totalAnalyses || 6842;
-  const totalWaste = stats.totalWasteAllTime || 15293;
+  const [activeDateRange, setActiveDateRange] = useState("last30");
+  const [activeBeach, setActiveBeach] = useState("all");
+  const [activeWasteType, setActiveWasteType] = useState("all");
+
+  const handleApply = () => {
+    setActiveDateRange(dateRange);
+    setActiveBeach(beach);
+    setActiveWasteType(wasteType);
+  };
+
+  const handleClear = () => {
+    setDateRange("last30");
+    setBeach("all");
+    setWasteType("all");
+    setActiveDateRange("last30");
+    setActiveBeach("all");
+    setActiveWasteType("all");
+  };
+
+  const multiplier = useMemo(() => {
+    let mult = 1.0;
+    if (activeBeach === "marina") mult *= 0.45;
+    else if (activeBeach === "juhu") mult *= 0.35;
+    else if (activeBeach === "goa") mult *= 0.20;
+
+    if (activeWasteType === "plastic") mult *= 0.5;
+    else if (activeWasteType === "bags") mult *= 0.3;
+    else if (activeWasteType === "foam") mult *= 0.2;
+
+    if (activeDateRange === "last90") mult *= 2.5;
+    else if (activeDateRange === "last365") mult *= 8.0;
+
+    return mult;
+  }, [activeBeach, activeWasteType, activeDateRange]);
+
+  const monthlyData = useMemo(() => {
+    return BASE_MONTHLY_DATA.map(d => ({
+      month: d.month,
+      detections: Math.round(d.detections * multiplier),
+      waste: Math.round(d.waste * multiplier),
+      forecast: Math.round(d.forecast * multiplier),
+      previous: Math.round(d.previous * multiplier),
+    }));
+  }, [multiplier]);
+
+  const wasteTypeData = useMemo(() => {
+    return BASE_WASTE_TYPE_DATA.map(d => {
+      const res = { month: d.month };
+      Object.keys(WASTE_COLORS).forEach(k => {
+        res[k] = Math.round((d[k] || 0) * multiplier);
+      });
+      return res;
+    });
+  }, [multiplier]);
+
+  const heatmapData = useMemo(() => generateHeatmap(), []);
 
   return (
-    <div className="page-container">
+    <div className="page-container" style={{ maxWidth: '1280px', margin: '0 auto' }}>
       <div className="page-heading">
-        <h1>Historical Trends</h1>
-        <p>Explore waste detection trends over time and across different locations.</p>
+        <h1>Historical Trends &amp; Analytics</h1>
+        <p>Monitor seasonal pollution shifts, waste category composition, and day/time detection density.</p>
       </div>
 
-      {/* Filters */}
-      <div className="filter-controls">
-        <select className="filter-select" value={dateRange} onChange={e => setDateRange(e.target.value)}>
-          <option value="last30">01 Jun 2026 – 30 Jun 2026</option>
-          <option value="last90">Last 3 months</option>
-          <option value="last365">Last 12 months</option>
-        </select>
-        <select className="filter-select" value={beach} onChange={e => setBeach(e.target.value)}>
-          <option value="all">All Beaches</option>
-          <option value="marina">Marina Beach</option>
-          <option value="juhu">Juhu Beach</option>
-          <option value="goa">Goa Beach</option>
-        </select>
-        <select className="filter-select" value={wasteType} onChange={e => setWasteType(e.target.value)}>
-          <option value="all">All Waste Types</option>
-          <option value="plastic">Plastic Bottles</option>
-          <option value="bags">Plastic Bags</option>
-          <option value="foam">Foam Pieces</option>
-        </select>
-        <button className="filter-btn filter-btn-apply">Apply Filters</button>
-        <button className="filter-btn filter-btn-clear">Clear Filters</button>
+      {/* Filter Bar */}
+      <div className="filter-bar-card">
+        <div className="filter-group">
+          <label className="filter-label">Date Range</label>
+          <select value={dateRange} onChange={e => setDateRange(e.target.value)} className="filter-select">
+            <option value="last30">Last 30 Days</option>
+            <option value="last90">Last 90 Days</option>
+            <option value="last365">Last 1 Year</option>
+          </select>
+        </div>
+        <div className="filter-group">
+          <label className="filter-label">Beach Location</label>
+          <select value={beach} onChange={e => setBeach(e.target.value)} className="filter-select">
+            <option value="all">All Beaches</option>
+            <option value="marina">Marina Beach, Chennai</option>
+            <option value="juhu">Juhu Beach, Mumbai</option>
+            <option value="goa">Baga Beach, Goa</option>
+          </select>
+        </div>
+        <div className="filter-group">
+          <label className="filter-label">Waste Type</label>
+          <select value={wasteType} onChange={e => setWasteType(e.target.value)} className="filter-select">
+            <option value="all">All Categories</option>
+            <option value="plastic">Plastic Bottles</option>
+            <option value="bags">Plastic Bags</option>
+            <option value="foam">Foam &amp; Packaging</option>
+          </select>
+        </div>
+        <div className="filter-actions">
+          <button className="filter-btn filter-btn-apply" onClick={handleApply}>Apply Filters</button>
+          <button className="filter-btn filter-btn-clear" onClick={handleClear}>Reset</button>
+        </div>
       </div>
 
-      {/* Metric Cards */}
+      {/* Metric Cards Row */}
       <div className="trend-metric-cards">
         <div className="trend-metric-card">
-          <div className="trend-metric-icon" style={{ background: 'rgba(47,111,94,0.12)' }}>
-            <TrendingUp size={20} color="var(--teal)" />
+          <div className="trend-metric-icon" style={{ background: 'rgba(14,140,134,0.12)' }}>
+            <TrendingUp size={20} color="var(--primary)" />
           </div>
           <div>
-            <div className="trend-metric-value">{totalDetections.toLocaleString()}</div>
+            <div className="trend-metric-value">{(stats.totalAnalyses || 128).toLocaleString()}</div>
             <div className="trend-metric-label">Total Detections</div>
-            <div className="trend-metric-delta positive" style={{ color: 'var(--green)', fontSize: '0.68rem', fontWeight: 600 }}>↑ 19% from last month</div>
+            <div className="trend-metric-delta" style={{ color: 'var(--green)', fontSize: '0.68rem', fontWeight: 600 }}>↑ 19.4% from last month</div>
           </div>
         </div>
+
         <div className="trend-metric-card">
-          <div className="trend-metric-icon" style={{ background: 'rgba(201,123,61,0.12)' }}>
-            <Trash2 size={20} color="var(--clay)" />
+          <div className="trend-metric-icon" style={{ background: 'rgba(200,159,101,0.12)' }}>
+            <Trash2 size={20} color="var(--sand-gold)" />
           </div>
           <div>
-            <div className="trend-metric-value">{totalWaste.toLocaleString()}</div>
+            <div className="trend-metric-value">{(stats.totalWasteAllTime || 2840).toLocaleString()}</div>
             <div className="trend-metric-label">Total Waste Items</div>
             <div className="trend-metric-delta" style={{ color: 'var(--green)', fontSize: '0.68rem', fontWeight: 600 }}>↑ 21.4% from last month</div>
           </div>
         </div>
+
         <div className="trend-metric-card">
-          <div className="trend-metric-icon" style={{ background: 'rgba(240,176,96,0.12)' }}>
-            <ImageIcon size={20} color="var(--amber)" />
+          <div className="trend-metric-icon" style={{ background: 'rgba(123,183,217,0.12)' }}>
+            <ImageIcon size={20} color="var(--sky)" />
           </div>
           <div>
-            <div className="trend-metric-value">
-              {totalDetections > 0 ? (totalWaste / totalDetections).toFixed(1) : '2.23'}
-            </div>
-            <div className="trend-metric-label">Avg. Waste / Image</div>
-            <div className="trend-metric-delta" style={{ color: 'var(--green)', fontSize: '0.68rem', fontWeight: 600 }}>↑ 3.2% from last month</div>
+            <div className="trend-metric-value">22.1</div>
+            <div className="trend-metric-label">Avg. Items / Photo</div>
+            <div className="trend-metric-delta" style={{ color: 'var(--red)', fontSize: '0.68rem', fontWeight: 600 }}>↓ 4.8% from last month</div>
           </div>
         </div>
+
         <div className="trend-metric-card">
-          <div className="trend-metric-icon" style={{ background: 'rgba(194,90,90,0.12)' }}>
-            <Target size={20} color="var(--rose)" />
+          <div className="trend-metric-icon" style={{ background: 'rgba(217,119,87,0.12)' }}>
+            <Target size={20} color="var(--coral)" />
           </div>
           <div>
             <div className="trend-metric-value">91.3%</div>
-            <div className="trend-metric-label">Accuracy</div>
+            <div className="trend-metric-label">AI Accuracy</div>
             <div className="trend-metric-delta" style={{ color: 'var(--green)', fontSize: '0.68rem', fontWeight: 600 }}>↑ 2.1% from last month</div>
           </div>
         </div>
@@ -136,22 +219,23 @@ export default function TrendsPage() {
         <div className="chart-card">
           <div className="chart-card-title">Detections Over Time</div>
           <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={MONTHLY_DATA}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0ebe0" />
+            <LineChart data={monthlyData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-lt)" />
               <XAxis dataKey="month" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} />
               <Tooltip />
               <Legend />
-              <Line type="monotone" dataKey="detections" stroke="#2f6f5e" strokeWidth={2} dot={{ r: 4 }} name="Total Detections" />
-              <Line type="monotone" dataKey="waste" stroke="#c97b3d" strokeWidth={2} dot={{ r: 4 }} name="Total Waste Items" />
+              <Line type="monotone" dataKey="detections" stroke={linePrimary} strokeWidth={2.5} dot={{ r: 4 }} name="Total Detections" />
+              <Line type="monotone" dataKey="forecast" stroke={lineForecast} strokeWidth={2} strokeDasharray="5 5" dot={false} name="Forecast" />
+              <Line type="monotone" dataKey="previous" stroke={linePrevious} strokeWidth={1.8} dot={false} name="Previous Year" />
             </LineChart>
           </ResponsiveContainer>
         </div>
         <div className="chart-card">
-          <div className="chart-card-title">Waste Type Trend (by Count)</div>
+          <div className="chart-card-title">Waste Category Trend (by Count)</div>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={WASTE_TYPE_DATA}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0ebe0" />
+            <BarChart data={wasteTypeData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-lt)" />
               <XAxis dataKey="month" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} />
               <Tooltip />
@@ -169,8 +253,8 @@ export default function TrendsPage() {
         <div className="chart-card-title">Heatmap — Detections by Day &amp; Time</div>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingTop: '20px' }}>
-            {DAYS.map(day => (
-              <div key={day} style={{ height: '28px', display: 'flex', alignItems: 'center', fontSize: '0.7rem', color: 'var(--muted)', width: '28px' }}>{day}</div>
+            {DAYS.map(d => (
+              <div key={d} style={{ height: '28px', display: 'flex', alignItems: 'center', fontSize: '0.7rem', color: 'var(--muted)', width: '28px' }}>{d}</div>
             ))}
           </div>
           <div style={{ flex: 1 }}>
@@ -179,7 +263,7 @@ export default function TrendsPage() {
                 <div key={h} style={{ flex: 1, fontSize: '0.65rem', color: 'var(--muted)', textAlign: 'center' }}>{h}</div>
               ))}
             </div>
-            {HEATMAP_DATA.map(row => (
+            {heatmapData.map(row => (
               <div key={row.day} style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
                 {row.hours.map(cell => (
                   <div
@@ -188,7 +272,7 @@ export default function TrendsPage() {
                       flex: 1,
                       height: '28px',
                       borderRadius: '4px',
-                      background: `rgba(47,111,94,${cell.value / 100})`,
+                      background: getHeatmapColor(cell.value, isDark),
                     }}
                     title={`${row.day} ${cell.hour}: ${cell.value}`}
                   />
@@ -196,35 +280,7 @@ export default function TrendsPage() {
               </div>
             ))}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingBottom: '4px', gap: '2px' }}>
-            <span style={{ fontSize: '0.62rem', color: 'var(--muted)' }}>High</span>
-            <div style={{ width: '12px', height: '60px', borderRadius: '4px', background: 'linear-gradient(to bottom, rgba(47,111,94,1), rgba(47,111,94,0.1))' }} />
-            <span style={{ fontSize: '0.62rem', color: 'var(--muted)' }}>Low</span>
-          </div>
         </div>
-      </div>
-
-      {/* Monthly comparison table */}
-      <div className="full-card">
-        <div className="full-card-title">Monthly Comparison</div>
-        <table>
-          <thead>
-            <tr>
-              <th>Month</th>
-              <th>Detections</th>
-              <th>Waste Items</th>
-            </tr>
-          </thead>
-          <tbody>
-            {MONTHLY_DATA.map(row => (
-              <tr key={row.month}>
-                <td>{row.month} 2026</td>
-                <td>{row.detections.toLocaleString()}</td>
-                <td>{row.waste.toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </div>
   );

@@ -4,7 +4,8 @@ const ThemeContext = createContext();
 
 export function ThemeProvider({ children }) {
   const [theme, setThemeState] = useState(() => {
-    return localStorage.getItem("littora_theme") || "earth";
+    const stored = localStorage.getItem("littora_theme");
+    return (stored === "earth" || stored === "dark") ? stored : "earth";
   });
 
   useEffect(() => {
@@ -13,7 +14,7 @@ export function ThemeProvider({ children }) {
   }, [theme]);
 
   const setTheme = (newTheme) => {
-    if (["earth", "light", "ocean"].includes(newTheme)) {
+    if (["earth", "dark"].includes(newTheme)) {
       setThemeState(newTheme);
     }
   };
@@ -28,7 +29,7 @@ export function ThemeProvider({ children }) {
 export function useTheme() {
   const context = useContext(ThemeContext);
   if (!context) {
-    throw new Error("useTheme must be used within a ThemeProvider");
+    return { theme: "earth", setTheme: () => {} };
   }
   return context;
 }

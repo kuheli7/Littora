@@ -4,8 +4,10 @@ import {
   Clock, FileText, Recycle, Database, Settings, LogOut, Shield
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useTheme } from "../context/ThemeContext.jsx";
 import logo from "../assets/logo.png";
-import navbarImage from "../assets/navbar_image.png";
+import navbarEarth from "../assets/navbar_image_earth.png";
+import navbarDark from "../assets/navbar_image_dark.png";
 
 const NAV_ITEMS = [
   { to: "/",          label: "Dashboard",             icon: LayoutDashboard, end: true },
@@ -22,6 +24,8 @@ const NAV_ITEMS = [
 
 export default function Sidebar({ isOpen, onClose }) {
   const { user, logout, isAdmin } = useAuth();
+  const { theme } = useTheme();
+  const navbarImage = theme === "dark" ? navbarDark : navbarEarth;
 
   const handleLogout = async () => {
     onClose();
@@ -78,18 +82,6 @@ export default function Sidebar({ isOpen, onClose }) {
               <span>{label}</span>
             </NavLink>
           ))}
-
-          {/* Admin link — visible only to admin users */}
-          {isAdmin && (
-            <NavLink
-              to="/admin"
-              className={({ isActive }) => `nav-item nav-item-admin${isActive ? " active" : ""}`}
-              onClick={onClose}
-            >
-              <Shield size={17} strokeWidth={1.8} aria-hidden="true" />
-              <span>Admin Dashboard</span>
-            </NavLink>
-          )}
         </nav>
 
         {/* Bottom Navbar Image Illustration */}

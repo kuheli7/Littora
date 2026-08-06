@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import axios from "axios";
+import { useAuth } from "./AuthContext.jsx";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
@@ -17,15 +18,21 @@ export const StatsContext = createContext(null);
 
 export function StatsProvider({ children }) {
   const [stats, setStats] = useState(EMPTY_STATS);
+  const { user, getToken } = useAuth();
 
   const loadStats = useCallback(async () => {
     try {
-      const { data } = await axios.get(`${API_BASE}/api/stats`);
+      const headers = {};
+      if (user) {
+        const token = await getToken();
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+      }
+      const { data } = await axios.get(`${API_BASE}/api/stats`, { headers });
       setStats(data);
     } catch (err) {
       console.error("Failed to load stats:", err);
     }
-  }, []);
+  }, [user, getToken]);
 
   useEffect(() => {
     loadStats();

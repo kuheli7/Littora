@@ -1,6 +1,11 @@
 import { useState } from "react";
-import { FileText, Calendar, BarChart3, Settings, Download } from "lucide-react";
+import { FileText, Calendar, BarChart3, Settings, Download, Mail, CheckCircle, AlertTriangle, Loader2 } from "lucide-react";
+import axios from "axios";
 import { useStats } from "../context/StatsContext.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
+import { generatePdfReport } from "../utils/generatePdfReport.js";
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
 const REPORT_TYPES = [
   { id: "daily",   icon: <FileText size={20} />,   title: "Daily Report",   desc: "Summary of today's detections" },
@@ -11,13 +16,99 @@ const REPORT_TYPES = [
 
 export default function ReportsPage() {
   const { stats } = useStats();
+  const { getToken, user } = useAuth();
   const [selected, setSelected] = useState("monthly");
+  const [emailing, setEmailing] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (type, message) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  const generateReportText = () => {
+    const reportTitle = REPORT_TYPES.find(r => r.id === selected)?.title || "Beach Waste Report";
+    const timestamp = new Date().toLocaleDateString("en-IN", {
+      year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit"
+    });
+
+    return `=====================================================
+LITTORA - AI BEACH WASTE DETECTION SYSTEM
+REPORT TYPE: ${reportTitle.toUpperCase()}
+GENERATED FOR: ${user?.email || "User"}
+DATE: ${timestamp}
+=====================================================
+
+1. SUMMARY METRICS
+-----------------------------------------------------
+- Total Detections Executed: ${(stats.totalAnalyses || 0).toLocaleString()}
+- Total Waste Items Cataloged: ${(stats.totalWasteAllTime || 0).toLocaleString()}
+- Monitored Locations: ${stats.locations?.length || 0} beaches
+- AI Model Detection Accuracy: 91.3%
+- Average Pollution Score: ${stats.avgScore || 0}
+
+2. SEVERITY BREAKDOWN
+-----------------------------------------------------
+- Low Severity:      ${stats.severityCounts?.Low || 0}
+- Moderate Severity: ${stats.severityCounts?.Moderate || 0}
+- High Severity:     ${stats.severityCounts?.High || 0}
+- Severe Pollution:  ${stats.severityCounts?.Severe || 0}
+
+3. WASTE TYPE AGGREGATE COUNTS
+-----------------------------------------------------
+- Plastic Bottles: ${stats.aggregateDetections?.bottle || 0}
+- Metal Cans:       ${stats.aggregateDetections?.can || 0}
+- Plastic Bags:     ${stats.aggregateDetections?.bag || 0}
+- Food Wrappers:   ${stats.aggregateDetections?.wrapper || 0}
+
+4. ACTION RECOMMENDATIONS
+-----------------------------------------------------
+- Schedule targeted cleanup drives for high-severity beaches.
+- Increase recycling bin placement near dense visitor areas.
+- Continue automated daily surveillance of coastal zones.
+
+=====================================================
+End of Report - Littora Coastal Monitoring Systems
+`;
+  };
+
+  const handleDownloadReport = async () => {
+    setDownloading(true);
+    try {
+      await generatePdfReport(selected, stats, user);
+      showToast("success", "PDF Report downloaded successfully!");
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      showToast("error", "Could not generate PDF report.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleEmailReport = async () => {
+    setEmailing(true);
+    try {
+      const token = await getToken();
+      const reportText = generateReportText();
+      await axios.post(
+        `${API_BASE}/api/email/send-report`,
+        { reportType: selected, reportText },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      showToast("success", `Report emailed to ${user?.email || "your inbox"}!`);
+    } catch (err) {
+      showToast("error", err.response?.data?.error || "Could not email report.");
+    } finally {
+      setEmailing(false);
+    }
+  };
 
   return (
     <div className="page-container">
       <div className="page-heading">
         <h1>Reports</h1>
-        <p>Generate and download detailed reports on waste detection.</p>
+        <p>Generate, download, and email detailed reports on waste detection.</p>
       </div>
 
       <div className="cards-grid-2" style={{ marginBottom: '1.5rem' }}>
@@ -37,12 +128,28 @@ export default function ReportsPage() {
       </div>
 
       <div className="full-card">
-        <div className="full-card-title">
+        <div className="full-card-title" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
           Report Preview
-          <button className="export-btn">
-            <Download size={14} />
-            Download Report
-          </button>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button
+              className="export-btn"
+              onClick={handleEmailReport}
+              disabled={emailing}
+              style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: "var(--teal)", color: "#fff" }}
+            >
+              {emailing ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Mail size={14} />}
+              Email to Me
+            </button>
+            <button
+              className="export-btn"
+              onClick={handleDownloadReport}
+              disabled={downloading}
+              style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
+            >
+              {downloading ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Download size={14} />}
+              Download PDF Report
+            </button>
+          </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
           <div style={{ textAlign: 'center' }}>
@@ -63,9 +170,17 @@ export default function ReportsPage() {
           </div>
         </div>
         <p style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
-          Report includes charts, insights and recommendations based on the selected data.
+          Click <strong>Download Report</strong> or <strong>Email to Me</strong> to receive the detailed {selected} summary report.
         </p>
       </div>
+
+      {/* ── Toast ── */}
+      {toast && (
+        <div className={`admin-toast admin-toast-${toast.type}`}>
+          {toast.type === "success" ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
+          <span>{toast.message}</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -9,6 +9,7 @@ import statsRouter      from "./routes/stats.js";
 import authRouter       from "./routes/auth.js";
 import myAnalysesRouter from "./routes/myAnalyses.js";
 import adminRouter      from "./routes/admin.js";
+import emailRouter      from "./routes/email.js";
 
 const app = express();
 app.use(cors());
@@ -33,6 +34,8 @@ app.use("/api/my-analyses",  myAnalysesRouter);
 
 // GET /api/admin/analyses, DELETE /api/admin/analyses/:id (requires admin JWT)
 app.use("/api/admin",        adminRouter);
+
+app.use("/api/email",        emailRouter);
 
 export default app;
 

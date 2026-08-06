@@ -52,11 +52,27 @@ async def detect(file: UploadFile = File(...)):
     results = model.predict(image, verbose=False)[0]
 
     detections: dict[str, int] = {}
+    boxes = []
+    w, h = image.size
     for box in results.boxes:
         class_id = int(box.cls[0])
         raw_name = model.names[class_id]
         name = CLASS_NORMALIZATION.get(raw_name, raw_name)
         detections[name] = detections.get(name, 0) + 1
+        
+        xyxy = box.xyxy[0].tolist()
+        conf = float(box.conf[0])
+        boxes.append({
+            "class_name": name,
+            "confidence": round(conf, 2),
+            "box": [round(xyxy[0], 1), round(xyxy[1], 1), round(xyxy[2], 1), round(xyxy[3], 1)],
+            "box_normalized": [
+                round(xyxy[0] / w, 4),
+                round(xyxy[1] / h, 4),
+                round(xyxy[2] / w, 4),
+                round(xyxy[3] / h, 4)
+            ]
+        })
 
     total_waste, pollution_score, severity = compute_score(detections)
 
@@ -65,4 +81,5 @@ async def detect(file: UploadFile = File(...)):
         "total_waste": total_waste,
         "pollution_score": pollution_score,
         "severity": severity,
+        "boxes": boxes,
     }

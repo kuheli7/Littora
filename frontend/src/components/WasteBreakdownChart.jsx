@@ -2,12 +2,17 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
 
-// Match the severity-badge palette for visual consistency
 const COLORS = {
-  Bottle:  "#2f6f5e",
-  Can:     "#3d6ea1",
-  Bag:     "#c97b3d",
-  Wrapper: "#a13d3d",
+  Bottle:          "#0077B6",
+  "Plastic Bottle": "#0077B6",
+  Bag:             "#4CC9F0",
+  "Plastic Bag":    "#4CC9F0",
+  Wrapper:         "#F8961E",
+  Can:             "#90BE6D",
+  Glass:           "#577590",
+  Foam:            "#F94144",
+  Metal:           "#9C89B8",
+  Other:           "#ADB5BD",
 };
 
 export default function WasteBreakdownChart({ aggregateDetections }) {

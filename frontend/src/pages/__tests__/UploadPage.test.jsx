@@ -11,7 +11,7 @@ vi.mock("../../lib/supabase.js", () => ({
   },
 }));
 vi.mock("../../assets/logo.png",         () => ({ default: "logo.png" }));
-vi.mock("../../assets/navbar_image.png", () => ({ default: "navbar.png" }));
+vi.mock("../../assets/navbar_image_transparent.png", () => ({ default: "navbar.png" }));
 
 // Mock StatsContext
 vi.mock("../../context/StatsContext.jsx", () => ({
@@ -42,13 +42,14 @@ vi.mock("../../components/ResultPanel.jsx", () => ({
 
 import axios from "axios";
 import { AuthProvider } from "../../context/AuthContext.jsx";
+import { SettingsProvider } from "../../context/SettingsContext.jsx";
 import UploadPage from "../UploadPage.jsx";
 
 function renderUploadPage() {
   render(
-    <AuthProvider>
+    <SettingsProvider><AuthProvider>
       <UploadPage />
-    </AuthProvider>
+    </AuthProvider></SettingsProvider>
   );
 }
 
@@ -60,7 +61,7 @@ describe("UploadPage", () => {
     renderUploadPage();
     expect(screen.getByRole("heading", { name: /detect waste/i })).toBeInTheDocument();
     expect(screen.getByTestId("mock-upload-btn")).toBeInTheDocument();
-    expect(screen.getByText(/your analysis results will appear/i)).toBeInTheDocument();
+    expect(screen.getByText(/your analysis breakdown and charts will appear/i)).toBeInTheDocument();
   });
 
   it("shows detection result after successful upload", async () => {

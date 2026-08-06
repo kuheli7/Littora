@@ -16,7 +16,6 @@ const ReportsPage      = lazy(() => import("./pages/ReportsPage.jsx"));
 const CleanupPage      = lazy(() => import("./pages/CleanupPage.jsx"));
 const DatasetPage      = lazy(() => import("./pages/DatasetPage.jsx"));
 const SettingsPage     = lazy(() => import("./pages/SettingsPage.jsx"));
-const AdminDashboard   = lazy(() => import("./pages/AdminDashboard.jsx"));
 
 function PageLoader() {
   return (
@@ -81,15 +80,7 @@ export default function App() {
                 <Route path="/cleanup"   element={<CleanupPage />} />
                 <Route path="/dataset"   element={<DatasetPage />} />
                 <Route path="/settings"  element={<SettingsPage />} />
-                {/* Admin-only route */}
-                <Route
-                  path="/admin"
-                  element={
-                    <ProtectedRoute adminOnly>
-                      <AdminDashboard />
-                    </ProtectedRoute>
-                  }
-                />
+
                 {/* Legacy redirect */}
                 <Route path="/upload" element={<Navigate to="/detect" replace />} />
                 <Route path="*"       element={<Navigate to="/" replace />} />

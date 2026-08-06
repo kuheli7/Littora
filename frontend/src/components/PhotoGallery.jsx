@@ -94,13 +94,13 @@ export default function PhotoGallery({ items, showUser = false, onDeleteRequest,
                 </span>
               </div>
               {showUser && (
-                <div className="gallery-user-chip" title={row.user_email || row.user_id || "Anonymous"}>
+                <div className="gallery-user-chip" title={row.user_name ? `${row.user_name} (${row.user_email || ""})` : (row.user_email || row.user_id || "Anonymous")}>
                   <User size={10} />
-                  {row.user_email
+                  {row.user_name || (row.user_email
                     ? row.user_email.split("@")[0]
                     : row.user_id
                       ? row.user_id.slice(0, 8) + "…"
-                      : "Anon"}
+                      : "Anon")}
                 </div>
               )}
             </div>
@@ -138,11 +138,11 @@ export default function PhotoGallery({ items, showUser = false, onDeleteRequest,
             )}
 
             <div className="modal-body">
-              {showUser && (modalItem.user_email || modalItem.user_id) && (
-                <div className="admin-card-user" style={{ marginBottom: "0.5rem", fontSize: "0.8rem" }}>
-                  <User size={12} style={{ display: "inline", marginRight: "4px" }} />
-                  Uploaded by: <strong title={modalItem.user_id}>
-                    {modalItem.user_email || (modalItem.user_id?.slice(0, 12) + "…")}
+              {showUser && (modalItem.user_name || modalItem.user_email || modalItem.user_id) && (
+                <div className="admin-card-user" style={{ marginBottom: "0.5rem", fontSize: "0.85rem" }}>
+                  <User size={14} style={{ display: "inline", marginRight: "4px" }} />
+                  Uploaded by: <strong title={modalItem.user_email || modalItem.user_id}>
+                    {modalItem.user_name || (modalItem.user_email ? modalItem.user_email.split("@")[0] : (modalItem.user_id?.slice(0, 12) + "…"))}
                   </strong>
                 </div>
               )}

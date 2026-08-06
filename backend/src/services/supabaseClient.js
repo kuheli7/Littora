@@ -125,21 +125,26 @@ export async function listAllAnalysesAdmin() {
 
   if (error) throw error;
 
-  // Collect unique user IDs and fetch their emails from Auth
+  // Collect unique user IDs and fetch their emails/names from Auth
   const uniqueUserIds = [...new Set(data.map((r) => r.user_id).filter(Boolean))];
   const emailMap = {};
+  const nameMap = {};
   for (const uid of uniqueUserIds) {
     try {
       const { data: { user }, error: ue } = await supabase.auth.admin.getUserById(uid);
-      if (!ue && user) emailMap[uid] = user.email ?? null;
+      if (!ue && user) {
+        emailMap[uid] = user.email ?? null;
+        nameMap[uid]  = user.user_metadata?.full_name ?? user.email?.split("@")[0] ?? null;
+      }
     } catch (_) {
-      // non-fatal — leave email as undefined
+      // non-fatal — leave email/name as undefined
     }
   }
 
   return data.map((row) => ({
     ...row,
     user_email: row.user_id ? (emailMap[row.user_id] ?? null) : null,
+    user_name:  row.user_id ? (nameMap[row.user_id] ?? null) : null,
   }));
 }
 
@@ -236,15 +241,21 @@ export async function listAnalyses({ limit = 50, offset = 0 } = {}) {
  *
  * Aggregation is done in JS after a single DB query — no extra dependencies needed.
  */
-export async function getStats() {
-  const { data, error } = await supabase
+export async function getStats(userId = null) {
+  let query = supabase
     .from("analyses")
     .select(
       `id, image_url, created_at, total_waste, pollution_score, severity,
-       latitude, longitude, location_label,
+       latitude, longitude, location_label, user_id,
        detections ( waste_type, count )`
     )
     .order("created_at", { ascending: true }); // chronological — reversed below for table
+
+  if (userId) {
+    query = query.eq("user_id", userId);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
 
