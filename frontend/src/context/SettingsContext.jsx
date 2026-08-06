@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from "react";
+import { AuthContext } from "./AuthContext.jsx";
 
-const SettingsContext = createContext(null);
+export const SettingsContext = createContext(null);
 
 const DEFAULTS = {
   language: "en",
@@ -9,9 +10,14 @@ const DEFAULTS = {
   notifications: { email: true, highPollution: true, weekly: false },
 };
 
-function readLocal(key, fallback) {
+function getKey(prefix, userId) {
+  const scope = userId ? `user_${userId}` : "guest";
+  return `${prefix}_${scope}`;
+}
+
+function readLocal(prefix, userId, fallback) {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = localStorage.getItem(getKey(prefix, userId));
     if (raw === null) return fallback;
     return JSON.parse(raw);
   } catch {
@@ -20,34 +26,46 @@ function readLocal(key, fallback) {
 }
 
 export function SettingsProvider({ children }) {
+  const authCtx = useContext(AuthContext);
+  const userId = authCtx?.user?.id || null;
+
   const [language, setLanguageState] = useState(() =>
-    readLocal("littora_language", DEFAULTS.language)
+    readLocal("littora_language", userId, DEFAULTS.language)
   );
   const [dateFormat, setDateFormatState] = useState(() =>
-    readLocal("littora_dateformat", DEFAULTS.dateFormat)
+    readLocal("littora_dateformat", userId, DEFAULTS.dateFormat)
   );
   const [itemsPerPage, setItemsPerPageState] = useState(() =>
-    readLocal("littora_ipp", DEFAULTS.itemsPerPage)
+    readLocal("littora_ipp", userId, DEFAULTS.itemsPerPage)
   );
   const [notifications, setNotificationsState] = useState(() =>
-    readLocal("littora_notifs", DEFAULTS.notifications)
+    readLocal("littora_notifs", userId, DEFAULTS.notifications)
   );
+
+  // Sync state whenever the active user changes (e.g. login / logout / switch user)
+  useEffect(() => {
+    setLanguageState(readLocal("littora_language", userId, DEFAULTS.language));
+    setDateFormatState(readLocal("littora_dateformat", userId, DEFAULTS.dateFormat));
+    setItemsPerPageState(readLocal("littora_ipp", userId, DEFAULTS.itemsPerPage));
+    setNotificationsState(readLocal("littora_notifs", userId, DEFAULTS.notifications));
+  }, [userId]);
 
   const setLanguage = (v) => {
     setLanguageState(v);
-    localStorage.setItem("littora_language", JSON.stringify(v));
+    localStorage.setItem(getKey("littora_language", userId), JSON.stringify(v));
   };
   const setDateFormat = (v) => {
     setDateFormatState(v);
-    localStorage.setItem("littora_dateformat", JSON.stringify(v));
+    localStorage.setItem(getKey("littora_dateformat", userId), JSON.stringify(v));
   };
   const setItemsPerPage = (v) => {
-    setItemsPerPageState(Number(v));
-    localStorage.setItem("littora_ipp", JSON.stringify(Number(v)));
+    const num = Number(v);
+    setItemsPerPageState(num);
+    localStorage.setItem(getKey("littora_ipp", userId), JSON.stringify(num));
   };
   const setNotifications = (v) => {
     setNotificationsState(v);
-    localStorage.setItem("littora_notifs", JSON.stringify(v));
+    localStorage.setItem(getKey("littora_notifs", userId), JSON.stringify(v));
   };
 
   /**

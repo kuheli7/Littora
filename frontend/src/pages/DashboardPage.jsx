@@ -17,9 +17,6 @@ export default function DashboardPage() {
     if (el) el.scrollIntoView({ behavior: "smooth" });
   };
 
-  // Display initial letter of the logged-in user's email
-  const userInitial = user?.email?.[0]?.toUpperCase() ?? null;
-
   const { isAdmin } = useAuth();
 
   const sectionTitle =
@@ -35,25 +32,6 @@ export default function DashboardPage() {
         style={{ backgroundImage: `url(${dashboardBg})` }}
       >
         <div className="hero-light-overlay">
-          {/* Top-right overlay action */}
-          <div className="hero-top-actions">
-            {user ? (
-              /* Logged-in: show user avatar */
-              <div className="hero-user-avatar" title={user.email}>
-                {userInitial}
-              </div>
-            ) : (
-              /* Not logged in: Login button */
-              <button
-                className="btn-login-overlay"
-                onClick={() => navigate("/login")}
-                id="hero-login-btn"
-              >
-                <LogIn size={15} />
-                <span>Login</span>
-              </button>
-            )}
-          </div>
           <div className="hero-light-main">
             <h1 className="hero-title-light">
               AI-Powered<br />

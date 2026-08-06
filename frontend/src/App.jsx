@@ -28,24 +28,48 @@ function PageLoader() {
   );
 }
 
+import FloatingAccountMenu from "./components/FloatingAccountMenu.jsx";
+
 // Layout wrapper: sidebar + content (used for all protected pages)
 function AppShell({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("littora_sidebar_collapsed") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleCollapse = () => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("littora_sidebar_collapsed", String(next));
+      } catch {}
+      return next;
+    });
+  };
+
   return (
-    <div className="app-shell">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="content-area">
-        {/* Mobile topbar */}
-        <div className="topbar">
-          <button
-            className="hamburger"
-            onClick={() => setSidebarOpen(true)}
-            aria-label="Open navigation"
-          >
-            <Menu size={22} />
-          </button>
-          <span className="topbar-title">LITTORA</span>
+    <div className={`app-shell${isCollapsed ? " collapsed" : ""}`}>
+      <Sidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        isCollapsed={isCollapsed}
+        onToggleCollapse={toggleCollapse}
+      />
+      <div className="content-area" style={{ position: "relative" }}>
+        {/* Floating Account Icon in Top Right */}
+        <div style={{
+          position: "fixed",
+          top: "1.25rem",
+          right: "1.5rem",
+          zIndex: 1000
+        }}>
+          <FloatingAccountMenu />
         </div>
+
         <main className="main-content">
           <Suspense fallback={<PageLoader />}>
             {children}

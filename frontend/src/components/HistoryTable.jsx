@@ -2,9 +2,8 @@ import { useState, useMemo, useEffect, useContext } from "react";
 import { Download, Eye, Trash2, Loader2, X, User } from "lucide-react";
 import ResultPanel from "./ResultPanel.jsx";
 import { AuthContext } from "../context/AuthContext.jsx";
+import { SettingsContext } from "../context/SettingsContext.jsx";
 import AuthRequiredModal from "./AuthRequiredModal.jsx";
-
-const PAGE_SIZE = 10;
 
 function toResultShape(item) {
   if (!item) return { detections: {}, total_waste: 0, pollution_score: 0, severity: "Low" };
@@ -31,6 +30,10 @@ function toResultShape(item) {
  * passing data in, so this component only handles sort + pagination.
  */
 export default function HistoryTable({ history, showUser = false, onDeleteRequest, deletingId, onViewRequest }) {
+  const settingsCtx = useContext(SettingsContext);
+  const pageSize = Number(settingsCtx?.itemsPerPage) || 10;
+  const formatDate = settingsCtx?.formatDate || ((d) => d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—");
+
   const [sortField, setSortField] = useState("date");
   const [sortDir,   setSortDir]   = useState("desc");
   const [page,      setPage]      = useState(0);
@@ -38,7 +41,7 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
 
   useEffect(() => {
     setPage(0);
-  }, [history]);
+  }, [history, pageSize]);
 
   const sorted = useMemo(() => {
     const mul = sortDir === "asc" ? 1 : -1;
@@ -51,9 +54,9 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
     });
   }, [history, sortField, sortDir]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const safePage   = Math.min(page, totalPages - 1);
-  const paged      = sorted.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+  const paged      = sorted.slice(safePage * pageSize, (safePage + 1) * pageSize);
 
   function toggleSort(field) {
     if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -170,9 +173,7 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
                 )}
               </td>
               <td>
-                {new Date(row.created_at).toLocaleDateString("en-IN", {
-                  day: "numeric", month: "short", year: "numeric",
-                })}
+                {formatDate(row.created_at)}
               </td>
               <td>
                 <span className="location-text">
