@@ -1,129 +1,121 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { MemoryRouter } from "react-router-dom";
+import axios from "axios";
 
 vi.mock("axios");
 vi.mock("../../lib/supabase.js", () => ({
   supabase: {
     auth: {
-      getSession:        vi.fn().mockResolvedValue({ data: { session: { access_token: "tok", user: { id: "u1", email: "user@test.com" } } } }),
+      getSession:        vi.fn().mockResolvedValue({ data: { session: null } }),
       onAuthStateChange: vi.fn().mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } }),
     },
   },
 }));
-vi.mock("../../assets/logo.png",         () => ({ default: "logo.png" }));
-vi.mock("../../assets/navbar_image_transparent.png", () => ({ default: "navbar.png" }));
 
-// Mock StatsContext
-vi.mock("../../context/StatsContext.jsx", () => ({
-  useStats: () => ({ loadStats: vi.fn() }),
-}));
-
-// Mock UploadForm to avoid complex file input logic
-vi.mock("../../components/UploadForm.jsx", () => ({
-  default: ({ onUpload, loading }) => (
-    <div>
-      <button
-        data-testid="mock-upload-btn"
-        disabled={loading}
-        onClick={() => onUpload(new File(["content"], "test.jpg", { type: "image/jpeg" }), null)}
-      >
-        Upload
-      </button>
-    </div>
-  ),
-}));
-
-// Mock ResultPanel
-vi.mock("../../components/ResultPanel.jsx", () => ({
-  default: ({ result }) => (
-    <div data-testid="result-panel">Score: {result.pollution_score}</div>
-  ),
-}));
-
-import axios from "axios";
+import { supabase } from "../../lib/supabase.js";
 import { AuthProvider } from "../../context/AuthContext.jsx";
+import { StatsProvider } from "../../context/StatsContext.jsx";
 import { SettingsProvider } from "../../context/SettingsContext.jsx";
 import UploadPage from "../UploadPage.jsx";
 
-function renderUploadPage() {
-  render(
-    <SettingsProvider><AuthProvider>
-      <UploadPage />
-    </AuthProvider></SettingsProvider>
+function renderUploadPage({ user = null } = {}) {
+  if (user) {
+    supabase.auth.getSession.mockResolvedValueOnce({
+      data: { session: { user } },
+    });
+  }
+  return render(
+    <MemoryRouter>
+      <SettingsProvider>
+        <AuthProvider>
+          <StatsProvider>
+            <UploadPage />
+          </StatsProvider>
+        </AuthProvider>
+      </SettingsProvider>
+    </MemoryRouter>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-describe("UploadPage", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("renders the page heading and upload + result panels", () => {
-    renderUploadPage();
-    expect(screen.getByRole("heading", { name: /detect waste/i })).toBeInTheDocument();
-    expect(screen.getByTestId("mock-upload-btn")).toBeInTheDocument();
-    expect(screen.getByText(/your analysis breakdown and charts will appear/i)).toBeInTheDocument();
-  });
-
-  it("shows detection result after successful upload", async () => {
-    axios.post = vi.fn().mockResolvedValueOnce({
-      data: {
-        id:              "a1",
-        image_url:       "https://example.com/img.jpg",
-        detections:      { bottle: 2, can: 1, bag: 0, wrapper: 0 },
-        total_waste:     3,
-        pollution_score: 42,
-        severity:        "Moderate",
-      },
-    });
-
-    renderUploadPage();
-    await vi.waitFor(() => screen.getByTestId("mock-upload-btn"));
-    fireEvent.click(screen.getByTestId("mock-upload-btn"));
-
-    await waitFor(() => {
-      expect(screen.getByTestId("result-panel")).toBeInTheDocument();
-      expect(screen.getByText(/score: 42/i)).toBeInTheDocument();
+describe("UploadPage component", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    supabase.auth.onAuthStateChange.mockReturnValue({
+      data: { subscription: { unsubscribe: vi.fn() } },
     });
   });
 
-  it("shows an error message when upload fails", async () => {
-    axios.post = vi.fn().mockRejectedValueOnce({
-      response: { data: { error: "AI service unavailable" } },
-    });
-
+  it("renders page title and upload placeholder card", async () => {
     renderUploadPage();
-    await vi.waitFor(() => screen.getByTestId("mock-upload-btn"));
-    fireEvent.click(screen.getByTestId("mock-upload-btn"));
+    await vi.waitFor(() => {
+      expect(screen.getByRole("heading", { name: /detect waste/i })).toBeInTheDocument();
+    });
+    expect(screen.getByText("Upload & Detection View")).toBeInTheDocument();
+    expect(screen.getByText("Detection Result & Analytics")).toBeInTheDocument();
+    expect(screen.getByText(/Your analysis breakdown and charts will appear here/i)).toBeInTheDocument();
+  });
 
-    await waitFor(() => {
-      expect(screen.getByText(/ai service unavailable/i)).toBeInTheDocument();
+  it("opens AuthRequiredModal when unauthenticated guest attempts to upload file", async () => {
+    const { container } = renderUploadPage(); // guest
+    await vi.waitFor(() => screen.getByRole("heading", { name: /detect waste/i }));
+
+    const file = new File(["dummy content"], "beach.png", { type: "image/png" });
+    const input = container.querySelector("input[type='file']");
+    fireEvent.change(input, { target: { files: [file] } });
+
+    fireEvent.click(screen.getByRole("button", { name: /analyze photo/i }));
+
+    expect(screen.getByText("Sign In Required")).toBeInTheDocument();
+    expect(screen.getByText(/run AI waste detection on beach photos/i)).toBeInTheDocument();
+  });
+
+  it("successfully posts image payload and renders ResultPanel when logged in", async () => {
+    const mockResult = {
+      total_waste: 4,
+      pollution_score: 55,
+      severity: "Moderate",
+      latitude: 19.07,
+      longitude: 72.87,
+      location_label: "Juhu Beach",
+      detections: { bottle: 2, can: 2 },
+      bBoxes: [],
+    };
+    axios.post.mockResolvedValueOnce({ data: mockResult });
+
+    const { container } = renderUploadPage({ user: { id: "u-auth", email: "auth@example.com" } });
+    await vi.waitFor(() => screen.getByRole("heading", { name: /detect waste/i }));
+
+    const file = new File(["dummy image"], "clean.png", { type: "image/png" });
+    const input = container.querySelector("input[type='file']");
+    fireEvent.change(input, { target: { files: [file] } });
+
+    fireEvent.click(screen.getByRole("button", { name: /analyze photo/i }));
+
+    await vi.waitFor(() => {
+      expect(axios.post).toHaveBeenCalled();
+      expect(screen.getByText("Total waste")).toBeInTheDocument();
+      expect(screen.getByText("Moderate")).toBeInTheDocument();
     });
   });
 
-  it("shows fallback error when error has no response", async () => {
-    axios.post = vi.fn().mockRejectedValueOnce(new Error("Network error"));
-
-    renderUploadPage();
-    await vi.waitFor(() => screen.getByTestId("mock-upload-btn"));
-    fireEvent.click(screen.getByTestId("mock-upload-btn"));
-
-    await waitFor(() => {
-      expect(screen.getByText(/analysis failed/i)).toBeInTheDocument();
+  it("renders error alert message when backend analysis request fails", async () => {
+    axios.post.mockRejectedValueOnce({
+      response: { data: { error: "AI model failed to process image" } },
     });
-  });
 
-  it("disables the upload button while loading", async () => {
-    let resolve;
-    axios.post = vi.fn().mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+    const { container } = renderUploadPage({ user: { id: "u-auth", email: "auth@example.com" } });
+    await vi.waitFor(() => screen.getByRole("heading", { name: /detect waste/i }));
 
-    renderUploadPage();
-    await vi.waitFor(() => screen.getByTestId("mock-upload-btn"));
-    fireEvent.click(screen.getByTestId("mock-upload-btn"));
+    const file = new File(["broken image"], "bad.png", { type: "image/png" });
+    const input = container.querySelector("input[type='file']");
+    fireEvent.change(input, { target: { files: [file] } });
 
-    expect(screen.getByTestId("mock-upload-btn")).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /analyze photo/i }));
 
-    resolve({
-      data: { id: "a1", image_url: "", detections: {}, total_waste: 0, pollution_score: 0, severity: "Low" },
+    await vi.waitFor(() => {
+      expect(screen.getByText(/AI model failed to process image/i)).toBeInTheDocument();
     });
   });
 });

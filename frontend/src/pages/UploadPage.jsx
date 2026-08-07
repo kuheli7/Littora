@@ -6,16 +6,24 @@ import { useAuth }  from "../context/AuthContext.jsx";
 import UploadForm  from "../components/UploadForm.jsx";
 import ResultPanel from "../components/ResultPanel.jsx";
 
+import AuthRequiredModal from "../components/AuthRequiredModal.jsx";
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
 export default function UploadPage() {
   const { loadStats }  = useStats();
-  const { getToken }   = useAuth();
+  const { user, getToken } = useAuth();
   const [result,  setResult]  = useState(null);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   async function handleUpload(file, coords) {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -86,6 +94,12 @@ export default function UploadPage() {
           </div>
         </div>
       </div>
+
+      <AuthRequiredModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        featureName="run AI waste detection on beach photos"
+      />
     </div>
   );
 }

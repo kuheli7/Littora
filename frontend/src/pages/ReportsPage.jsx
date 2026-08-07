@@ -4,6 +4,7 @@ import axios from "axios";
 import { useStats } from "../context/StatsContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { generatePdfReport } from "../utils/generatePdfReport.js";
+import AuthRequiredModal from "../components/AuthRequiredModal.jsx";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
@@ -73,7 +74,13 @@ End of Report - Littora Coastal Monitoring Systems
 `;
   };
 
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
   const handleDownloadReport = async () => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
     setDownloading(true);
     try {
       await generatePdfReport(selected, stats, user);
@@ -87,6 +94,10 @@ End of Report - Littora Coastal Monitoring Systems
   };
 
   const handleEmailReport = async () => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
     setEmailing(true);
     try {
       const token = await getToken();
@@ -181,6 +192,12 @@ End of Report - Littora Coastal Monitoring Systems
           <span>{toast.message}</span>
         </div>
       )}
+
+      <AuthRequiredModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        featureName="export or email PDF reports"
+      />
     </div>
   );
 }

@@ -7,11 +7,15 @@ The backend of **Littora** serves as the central orchestration API between the R
 ## 🌟 Responsibilities
 
 - **📷 Image Storage Orchestration**: Receives multipart image uploads from the browser, forwards them to the AI service for inference, uploads image buffers to Supabase Storage (`beach-waste-images`), and persists analysis records.
-- **🔒 JWT Authentication & Middleware**:
+- **🔒 3-Tier Data Access Isolation**:
+  - **Admin**: System-wide platform metrics across all uploaders with uploader email & name enrichment via Supabase Auth Admin API (`listAllAnalysesAdmin`).
+  - **Regular User**: User-scoped metrics (`getStats(userId)`), personal analysis listing (`listAnalysesByUser`), and owned row deletion (`deleteAnalysisForUser`).
+  - **Guest Visitor**: Empty stats fallback & 0 totals for guest preview mode.
+- **🔒 Auth & Middleware**:
   - `requireAuth`: Verifies Bearer JWT tokens with Supabase Auth (`supabase.auth.getUser(token)`).
   - `requireAdmin`: Enforces admin privileges by matching `req.user.email` against `ADMIN_EMAIL`.
-- **📧 Email Notifications**: Automated report emailing via Nodemailer.
-- **📊 Analytics Aggregation**: Provides endpoints for statistics, beach waste counts, severity breakdowns, and user history.
+- **📧 Email Notifications**: Automated report emailing via Nodemailer transport (`/api/email/send-report`).
+- **📊 Analytics Aggregation**: Pure JS aggregation for severity breakdowns, waste item counts, geolocated beach markers, and chronological history lists.
 
 ---
 
@@ -35,9 +39,10 @@ backend/
 │   │   ├── aiService.js       → HTTP client forwarding to Python FastAPI
 │   │   ├── emailService.js    → Nodemailer configuration & transport
 │   │   └── supabaseClient.js  → Supabase client, storage upload & DB queries
-│   └── __tests__/         → Jest integration and route unit tests
+│   └── __tests__/         → Jest unit & integration test suite (75 tests passing)
 ├── .env.example           → Environment variable template
-└── package.json
+├── jest.config.js         → Jest ES modules configuration
+└── package.json           → Express dependencies & scripts
 ```
 
 ---
@@ -49,10 +54,10 @@ Copy `.env.example` to `.env`:
 ```env
 PORT=4000
 SUPABASE_URL=https://your-supabase-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+SUPABASE_SECRET_KEY=your-supabase-secret-key
 SUPABASE_STORAGE_BUCKET=beach-waste-images
 AI_SERVICE_URL=http://localhost:8000
-ADMIN_EMAIL=admin@littora.org
+ADMIN_EMAIL=admin@littora.app
 ```
 
 ### 2. Install Dependencies
@@ -66,8 +71,20 @@ npm run dev
 ```
 *Server runs on `http://localhost:4000`.*
 
-### 4. Run Test Suite
+---
+
+## 🧪 Testing & Coverage
+
 ```bash
+# Run unit & integration test suite
 npm test
+
+# Generate coverage report
+npm run test:coverage
 ```
-*Executes Jest tests for auth routes, analyze endpoint, and middleware.*
+
+### Coverage Metrics (Jest V8)
+- **Statements**: **89.76%**
+- **Functions**: **96.77%**
+- **Lines**: **91.06%**
+- **Passing**: **75 / 75 tests** across 10 test suites

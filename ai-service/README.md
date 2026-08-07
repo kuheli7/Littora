@@ -6,9 +6,9 @@ The **ai-service** component is a stateless microservice responsible for real-ti
 
 ## 🌟 Responsibilities
 
-- **🎯 Object Detection**: Classifies waste items into four core categories: `bottle`, `can`, `bag`, `wrapper`.
+- **🎯 Object Detection**: Classifies waste items into core categories (`bottle`, `can`, `bag`, `wrapper`, `glass`, `foam`, `metal`, `other`).
 - **📐 Bounding Box Output**: Returns normalized bounding boxes (`x_min`, `y_min`, `x_max`, `y_max`) and detection confidence scores.
-- **📈 Pollution Scoring**: Calculates a normalized pollution score (0–100) and severity classification (`Low`, `Moderate`, `High`, `Severe`) based on waste density and category weights.
+- **📈 Pollution Scoring**: Calculates a normalized pollution score (0–100) and severity classification (`Low`, `Moderate`, `High`, `Severe`) based on waste density and category weights (`severity.py`).
 - **⚡ Stateless Execution**: Operates purely in-memory; returns JSON inference results without direct database or storage dependencies.
 
 ---
@@ -18,7 +18,9 @@ The **ai-service** component is a stateless microservice responsible for real-ti
 ```text
 ai-service/
 ├── main.py            → FastAPI application & /detect endpoint
-├── best.pt            → Trained YOLOv8 weights (YOLOv8n)
+├── severity.py        → Pollution scoring algorithm & severity calculator
+├── models/            → YOLOv8 model weights directory
+│   └── best.pt        → Trained YOLOv8n weights
 ├── requirements.txt   → PyTorch, Ultralytics, FastAPI, OpenCV, Uvicorn dependencies
 └── README.md
 ```

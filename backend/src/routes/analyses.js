@@ -6,6 +6,11 @@ const router = Router();
 // GET /api/analyses?limit=50&offset=0 — powers the Week 7 history/analytics view
 router.get("/", async (req, res) => {
   try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.json([]);
+    }
+
     const limit = parseInt(req.query.limit, 10) || 50;
     const offset = parseInt(req.query.offset, 10) || 0;
 

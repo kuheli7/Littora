@@ -1,8 +1,9 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useContext } from "react";
 import { Download, Eye, Trash2, Loader2, X, User } from "lucide-react";
 import ResultPanel from "./ResultPanel.jsx";
-
-const PAGE_SIZE = 10;
+import { AuthContext } from "../context/AuthContext.jsx";
+import { SettingsContext } from "../context/SettingsContext.jsx";
+import AuthRequiredModal from "./AuthRequiredModal.jsx";
 
 function toResultShape(item) {
   if (!item) return { detections: {}, total_waste: 0, pollution_score: 0, severity: "Low" };
@@ -29,6 +30,10 @@ function toResultShape(item) {
  * passing data in, so this component only handles sort + pagination.
  */
 export default function HistoryTable({ history, showUser = false, onDeleteRequest, deletingId, onViewRequest }) {
+  const settingsCtx = useContext(SettingsContext);
+  const pageSize = Number(settingsCtx?.itemsPerPage) || 10;
+  const formatDate = settingsCtx?.formatDate || ((d) => d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—");
+
   const [sortField, setSortField] = useState("date");
   const [sortDir,   setSortDir]   = useState("desc");
   const [page,      setPage]      = useState(0);
@@ -36,7 +41,7 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
 
   useEffect(() => {
     setPage(0);
-  }, [history]);
+  }, [history, pageSize]);
 
   const sorted = useMemo(() => {
     const mul = sortDir === "asc" ? 1 : -1;
@@ -49,9 +54,9 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
     });
   }, [history, sortField, sortDir]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const safePage   = Math.min(page, totalPages - 1);
-  const paged      = sorted.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+  const paged      = sorted.slice(safePage * pageSize, (safePage + 1) * pageSize);
 
   function toggleSort(field) {
     if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -61,6 +66,46 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
 
   const sortIcon = (field) =>
     sortField !== field ? " ↕" : sortDir === "asc" ? " ↑" : " ↓";
+
+  const authCtx = useContext(AuthContext);
+  const user = authCtx?.user;
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authFeature, setAuthFeature] = useState("export data");
+
+  const handleExportCSV = () => {
+    if (authCtx !== null && !user) {
+      setAuthFeature("export analysis records");
+      setShowAuthModal(true);
+      return;
+    }
+    // Convert sorted records to CSV download
+    const headers = ["ID", "Date", "Location", "Top Waste Type", "Score", "Severity"];
+    const rows = sorted.map(r => [
+      r.id,
+      new Date(r.created_at).toISOString(),
+      `"${r.location_label || ''}"`,
+      r.topType || r.waste_type || 'Unknown',
+      r.pollution_score || 0,
+      r.severity || 'Low'
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `littora_analyses_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDeleteClick = (id) => {
+    if (authCtx !== null && !user) {
+      setAuthFeature("delete analysis records");
+      setShowAuthModal(true);
+      return;
+    }
+    if (onDeleteRequest) onDeleteRequest(id);
+  };
 
   if (!history || history.length === 0) {
     return (
@@ -79,7 +124,7 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
         <p className="section-title" style={{ margin: 0 }}>Analysis Records</p>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
           <span className="page-info">{sorted.length} entries</span>
-          <button className="export-btn">
+          <button className="export-btn" onClick={handleExportCSV}>
             <Download size={14} />
             Export CSV
           </button>
@@ -128,9 +173,7 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
                 )}
               </td>
               <td>
-                {new Date(row.created_at).toLocaleDateString("en-IN", {
-                  day: "numeric", month: "short", year: "numeric",
-                })}
+                {formatDate(row.created_at)}
               </td>
               <td>
                 <span className="location-text">
@@ -182,7 +225,7 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
                       title="Delete analysis"
                       aria-label="Delete analysis"
                       disabled={deletingId === row.id}
-                      onClick={() => onDeleteRequest(row.id)}
+                      onClick={() => handleDeleteClick(row.id)}
                     >
                       {deletingId === row.id
                         ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} />
@@ -263,6 +306,12 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
           </div>
         </div>
       )}
+
+      <AuthRequiredModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        featureName={authFeature}
+      />
     </div>
   );
 }

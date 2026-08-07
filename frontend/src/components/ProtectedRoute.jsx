@@ -7,7 +7,7 @@ import { useAuth } from "../context/AuthContext.jsx";
  * - If not logged in → redirect to /login (with return path).
  * - If adminOnly=true and not admin → redirect to /.
  */
-export default function ProtectedRoute({ children, adminOnly = false }) {
+export default function ProtectedRoute({ children, adminOnly = false, allowGuest = true }) {
   const { user, loading, isAdmin } = useAuth();
   const location = useLocation();
 
@@ -22,7 +22,7 @@ export default function ProtectedRoute({ children, adminOnly = false }) {
     );
   }
 
-  if (!user) {
+  if (!user && !allowGuest) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 

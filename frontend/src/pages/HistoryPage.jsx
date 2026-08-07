@@ -12,7 +12,7 @@ const API_BASE   = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 const SEVERITIES = ["All", "Low", "Moderate", "High", "Severe"];
 
 export default function HistoryPage() {
-  const { getToken, isAdmin } = useAuth();
+  const { user, getToken, isAdmin } = useAuth();
 
   const [history,     setHistory]     = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -35,6 +35,11 @@ export default function HistoryPage() {
     setError(null);
     try {
       const token = await getToken();
+      if (!token) {
+        setHistory([]);
+        setLoading(false);
+        return;
+      }
       const endpoint = isAdmin
         ? `${API_BASE}/api/admin/analyses`
         : `${API_BASE}/api/my-analyses`;
@@ -144,6 +149,11 @@ export default function HistoryPage() {
               Refresh
             </button>
           </div>
+        ) : !user ? (
+          <>
+            <h1>Detection History (Guest Preview)</h1>
+            <p>You are viewing History in <strong>Guest Preview Mode</strong>. Sign in to view your personal analysis records.</p>
+          </>
         ) : (
           <>
             <h1>My History</h1>
@@ -201,8 +211,35 @@ export default function HistoryPage() {
         </div>
       )}
 
+      {/* Guest Lock Banner */}
+      {!user && !loading && (
+        <div className="result-placeholder" style={{ marginTop: "2rem", padding: "3rem 1.5rem", textAlign: "center" }}>
+          <div style={{
+            width: "56px", height: "56px", borderRadius: "50%",
+            background: "rgba(47, 111, 94, 0.12)", color: "var(--teal)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            margin: "0 auto 1rem"
+          }}>
+            <Shield size={28} strokeWidth={1.8} />
+          </div>
+          <h3 style={{ fontSize: "1.2rem", fontWeight: 700, margin: "0 0 0.5rem", color: "var(--ink)" }}>
+            History is Private to Signed-In Users
+          </h3>
+          <p style={{ maxWidth: "480px", margin: "0 auto 1.5rem", fontSize: "0.88rem", color: "var(--muted)" }}>
+            Guest visitors can preview the dashboard and beach map. Please sign in to record detections, view your private detection history, and export data.
+          </p>
+          <button
+            className="filter-btn-apply"
+            onClick={() => window.location.href = "/login"}
+            style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0.75rem 1.8rem" }}
+          >
+            Sign In to Access History
+          </button>
+        </div>
+      )}
+
       {/* Empty state */}
-      {!loading && !error && history.length === 0 && (
+      {user && !loading && !error && history.length === 0 && (
         <div className="result-placeholder" style={{ marginTop: "3rem" }}>
           <ImageOff size={48} strokeWidth={1.2} />
           {isAdmin ? (
@@ -219,7 +256,7 @@ export default function HistoryPage() {
       )}
 
       {/* Filters + content */}
-      {!loading && !error && history.length > 0 && (
+      {user && !loading && !error && history.length > 0 && (
         <>
           <div className="history-controls">
             <p className="section-title" style={{ margin: 0 }}>

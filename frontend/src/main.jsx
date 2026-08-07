@@ -31,13 +31,13 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <BrowserRouter>
       <InviteRedirectHandler>
         <ThemeProvider>
-          <SettingsProvider>
-            <AuthProvider>
+          <AuthProvider>
+            <SettingsProvider>
               <StatsProvider>
                 <App />
               </StatsProvider>
-            </AuthProvider>
-          </SettingsProvider>
+            </SettingsProvider>
+          </AuthProvider>
         </ThemeProvider>
       </InviteRedirectHandler>
     </BrowserRouter>

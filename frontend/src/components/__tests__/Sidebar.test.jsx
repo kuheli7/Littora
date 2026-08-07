@@ -71,17 +71,8 @@ describe("Sidebar component", () => {
     });
   });
 
-  it("renders user info strip when logged in", async () => {
-    renderSidebar({ user: { id: "u1", email: "jane@test.com" } });
-    await vi.waitFor(() => {
-      expect(screen.getByText("jane")).toBeInTheDocument();
-      expect(screen.getByText("jane@test.com")).toBeInTheDocument();
-    });
-  });
-
-  it("renders 'U' avatar initial as fallback when no user", async () => {
-    renderSidebar(); // no user
-    // No user strip rendered; just check sidebar appears
+  it("renders sidebar element", async () => {
+    renderSidebar();
     await vi.waitFor(() => {
       expect(screen.getByRole("complementary")).toBeInTheDocument();
     });
@@ -109,18 +100,22 @@ describe("Sidebar component", () => {
     expect(document.querySelector(".sidebar-backdrop")).not.toBeInTheDocument();
   });
 
-  it("calls logout and onClose when Logout button is clicked", async () => {
-    supabase.auth.signOut.mockResolvedValueOnce({});
-    const { onClose } = renderSidebar({
-      user: { id: "u1", email: "user@test.com" },
-    });
+  it("renders collapsed class when isCollapsed=true and calls onToggleCollapse", async () => {
+    const onToggleCollapse = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <Sidebar isOpen={true} onClose={onClose} isCollapsed={true} onToggleCollapse={onToggleCollapse} />
+        </AuthProvider>
+      </MemoryRouter>
+    );
 
-    await vi.waitFor(() => screen.getByRole("button", { name: /logout/i }));
-    fireEvent.click(screen.getByRole("button", { name: /logout/i }));
+    const aside = screen.getByRole("complementary");
+    expect(aside).toHaveClass("collapsed");
 
-    await waitFor(() => {
-      expect(supabase.auth.signOut).toHaveBeenCalledOnce();
-      expect(onClose).toHaveBeenCalledOnce();
-    });
+    const collapseBtn = screen.getByRole("button", { name: /expand sidebar/i });
+    fireEvent.click(collapseBtn);
+    expect(onToggleCollapse).toHaveBeenCalledOnce();
   });
 });

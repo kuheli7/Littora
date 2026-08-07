@@ -10,21 +10,28 @@
 - **🎨 Dual Theme Design System**:
   - **Earth Theme**: Warm coastal dune aesthetic (`#f7f2e8` sand tones with custom watercolor botany artwork).
   - **Dark Theme**: High-contrast dark dashboard (`#0a0f1e` deep navy with `#00d4aa` cyan accents, custom glowing cyber-botanical artwork, and high-contrast typography).
-- **🔒 Authentication & Standard Sliding Sessions**:
-  - Integrated Supabase Auth with Role-Based Access Control (Admin Dashboard for managing all users' analyses).
+- **🔒 Auth & 3-Tier Data Access Isolation**:
+  - Integrated Supabase Auth with Role-Based Access Control.
+  - **Administrator**: System-wide platform metrics across all uploaders with uploader email & name enrichment.
+  - **Account Member**: User-scoped metrics and personal detection history gallery.
+  - **Guest Visitor**: Interactive preview access (statistics, maps, dataset explorer) with locked actions (*AI detection, data export, report generation, deletion*) prompting an `AuthRequiredModal`.
   - Implements **Standard Supabase Sliding Sessions** (seamless background token rotation without artificial hard cutoffs).
+- **👤 Floating Account Menu & Collapsable Navigation**:
+  - **Top-Right Floating Account Trigger**: Elevated glassmorphic badge displaying avatar, role status (*Administrator amber, Member teal, Guest grey*), quick links (`/settings`, `/history`, `/analytics`), and modal logout confirmation.
+  - **Collapsable Sidebar**: Smooth grid transition between expanded (`250px`) and icon-only (`72px`) view with persistent state.
 - **📄 High-Performance PDF Report Generation**:
   - Export styled, publication-ready PDF reports (`Daily`, `Weekly`, `Monthly`, `Custom`).
   - Optimized vector/canvas PDF generator using `jsPDF` + `html2canvas` with **75% JPEG compression** (~200KB file size, 97%+ reduction).
-- **⚙️ Full Settings System**:
+- **⚙️ User-Scoped Settings System**:
+  - **Isolated Storage**: Dynamic localStorage keys formatted as `littora_*_user_<id>` for logged-in users and `littora_*_guest` for guest visitors.
   - **Language Preferences**: Interface language switcher (English, Hindi, Tamil).
   - **Date Format Control**: Configurable date formatting across all tables and charts (`DD MMM YYYY`, `MM/DD/YYYY`, `YYYY-MM-DD`).
   - **Dynamic Pagination**: Customizable rows per page (`10`, `25`, `50`) persisted across sessions.
   - **Notification Controls**: Email alerts, high-pollution threshold notifications, and weekly report preferences.
-  - **Data Export & Privacy**: One-click JSON data export of all user analyses and account management controls.
+  - **Data Export & Privacy**: One-click JSON data export of all user analyses and account deletion workflows.
 - **📊 Comprehensive Analytics & Reporting**:
   - **Historical Trends**: Detections over time, waste breakdown stacked charts, day/time pollution heatmaps.
-  - **Interactive Beach Map**: Geolocation tracking of pollution hot spots with interactive markers.
+  - **Interactive Beach Map**: Geolocation tracking of pollution hot spots with interactive markers and coastal beach presets (*Marina Beach, Puri Beach, Malpe Beach*).
   - **Cleanup Recommendations**: Automated priority-based cleanup suggestions based on severity.
   - **Dataset Explorer**: Sourcing notes and breakdown of merged YOLOv8 datasets.
 
@@ -63,16 +70,16 @@ Littora/
 ├── frontend/               → React + Vite SPA (Port 5173) [See frontend/README.md]
 │   ├── src/
 │   │   ├── assets/        → Themed artwork (Earth & Dark navbar images)
-│   │   ├── components/    → Sidebar, HistoryTable, ResultPanel, UploadForm, etc.
+│   │   ├── components/    → Sidebar, FloatingAccountMenu, HistoryTable, ResultPanel, UploadForm, etc.
 │   │   ├── context/       → AuthContext, ThemeContext, SettingsContext, StatsContext
 │   │   ├── pages/         → Dashboard, Detect, Trends, Map, History, Settings, Reports, etc.
 │   │   ├── utils/         → PDF Report Generator (generatePdfReport.js)
 │   │   └── index.css      → Complete CSS design system & dark mode tokens
-│   └── vitest.config.js   → Unit testing suite (Vitest + Testing Library)
+│   └── package.json       → Vitest unit testing suite (154 tests passing 100%)
 ├── backend/                → Node.js / Express API Server (Port 4000) [See backend/README.md]
 │   └── src/
 │       ├── index.js       → Express server & middleware
-│       ├── routes/        → /api/analyze, /api/my-analyses, /api/admin, /api/stats, /api/auth
+│       ├── routes/        → /api/analyze, /api/my-analyses, /api/admin, /api/stats, /api/email, /api/auth
 │       └── services/      → Supabase client & Email notifications
 ├── ai-service/             → Python FastAPI + YOLOv8 Inference (Port 8000) [See ai-service/README.md]
 │   ├── main.py            → FastAPI application & /detect endpoint
@@ -109,7 +116,7 @@ uvicorn main:app --reload --port 8000
 ```bash
 cd backend
 npm install
-cp .env.example .env        # Configure SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, AI_SERVICE_URL
+cp .env.example .env        # Configure SUPABASE_URL, SUPABASE_SECRET_KEY, AI_SERVICE_URL
 npm run dev                 # Runs on http://localhost:4000
 ```
 
@@ -124,16 +131,23 @@ npm run dev                 # Runs on http://localhost:5173
 
 ## 🧪 Testing & Verification
 
-### Running Frontend Tests
-```bash
-cd frontend
-npm test
-```
-
-### Running Backend Tests
+### Backend Test Coverage (Jest)
+- **Statements**: **89.76%**
+- **Functions**: **96.77%**
+- **Lines**: **91.06%**
+- **Passing**: **75 / 75 tests** across 10 test suites
 ```bash
 cd backend
-npm test
+npm run test:coverage
+```
+
+### Frontend Test Coverage (Vitest + Testing Library)
+- **Statements**: **73.81%**
+- **Context Services**: **94.96%**
+- **Passing**: **154 / 154 tests** across 23 test suites
+```bash
+cd frontend
+npm run test:coverage
 ```
 
 ---

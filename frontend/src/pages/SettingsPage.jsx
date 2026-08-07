@@ -5,6 +5,8 @@ import { useSettings } from "../context/SettingsContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { supabase } from "../lib/supabase.js";
 
+import AuthRequiredModal from "../components/AuthRequiredModal.jsx";
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
 export default function SettingsPage() {
@@ -15,7 +17,9 @@ export default function SettingsPage() {
     itemsPerPage, setItemsPerPage,
     notifications, setNotifications,
   } = useSettings();
-  const { getToken, logout } = useAuth();
+  const { getToken, logout, user } = useAuth();
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authFeature, setAuthFeature] = useState("access account settings");
 
   // --- Pending (unsaved) local state ---
   const [pendingTheme,       setPendingTheme]       = useState(theme);
@@ -53,11 +57,16 @@ export default function SettingsPage() {
     setNotifications(pendingNotifs);
     setSaved(true);
     showToast("success", "Settings saved successfully!");
-    setTimeout(() => setSaved(false), 2500);
+    setTimeout(() => setSaved(false), 3000);
   };
 
   // --- Export: download all user analyses as JSON ---
   const handleExport = async () => {
+    if (!user) {
+      setAuthFeature("export personal data");
+      setShowAuthModal(true);
+      return;
+    }
     setExporting(true);
     setExportDone(false);
     try {
@@ -113,6 +122,37 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      {!user && (
+        <div className="guest-preview-banner" style={{
+          background: "linear-gradient(135deg, rgba(47, 111, 94, 0.12) 0%, rgba(212, 146, 75, 0.12) 100%)",
+          border: "1px solid var(--border)",
+          borderRadius: "14px",
+          padding: "1.25rem 1.5rem",
+          marginBottom: "1.5rem",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: "1rem"
+        }}>
+          <div>
+            <h4 style={{ margin: "0 0 0.25rem", fontSize: "1rem", fontWeight: 700, color: "var(--ink)" }}>
+              👋 Guest Preferences Mode
+            </h4>
+            <p style={{ margin: 0, fontSize: "0.86rem", color: "var(--muted)" }}>
+              Theme, language, and display settings are saved locally in your browser. Sign in to sync preferences across devices, export data, and manage account settings.
+            </p>
+          </div>
+          <button
+            className="filter-btn-apply"
+            onClick={() => window.location.href = "/login"}
+            style={{ display: "flex", alignItems: "center", gap: "0.4rem", whiteSpace: "nowrap" }}
+          >
+            Sign In / Register
+          </button>
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem" }}>
         {/* ── LEFT COLUMN ── */}
@@ -225,95 +265,122 @@ export default function SettingsPage() {
 
         {/* ── RIGHT COLUMN ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-
-          {/* Notification Preferences */}
-          <div className="settings-section">
-            <div className="settings-section-title" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <Bell size={15} /> Notification Preferences
-            </div>
-
-            {[
-              { key: "email",         label: "Email Notifications",  desc: "Receive email updates on new analyses" },
-              { key: "highPollution", label: "High-Pollution Alerts", desc: "Get alerted when severity is High or Severe" },
-              { key: "weekly",        label: "Weekly Reports",        desc: "Receive a weekly summary of beach data" },
-            ].map((n) => (
-              <div key={n.key} className="settings-row">
-                <div>
-                  <div className="settings-row-label">{n.label}</div>
-                  <div className="settings-row-desc">{n.desc}</div>
+          {user ? (
+            <>
+              {/* Notification Preferences */}
+              <div className="settings-section">
+                <div className="settings-section-title" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <Bell size={15} /> Notification Preferences
                 </div>
-                <label className="toggle">
-                  <input
-                    type="checkbox"
-                    checked={pendingNotifs[n.key]}
-                    onChange={(e) =>
-                      setPendingNotifs((prev) => ({ ...prev, [n.key]: e.target.checked }))
-                    }
-                  />
-                  <span className="toggle-slider" />
-                </label>
-              </div>
-            ))}
-          </div>
 
-          {/* Data & Privacy */}
-          <div className="settings-section">
-            <div className="settings-section-title" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <Trash2 size={15} /> Data &amp; Privacy
-            </div>
-
-            {/* Export */}
-            <div className="settings-row">
-              <div>
-                <div className="settings-row-label">Export My Data</div>
-                <div className="settings-row-desc">Download all your analyses as JSON</div>
+                {[
+                  { key: "email",         label: "Email Notifications",  desc: "Receive email updates on new analyses" },
+                  { key: "highPollution", label: "High-Pollution Alerts", desc: "Get alerted when severity is High or Severe" },
+                  { key: "weekly",        label: "Weekly Reports",        desc: "Receive a weekly summary of beach data" },
+                ].map((n) => (
+                  <div key={n.key} className="settings-row">
+                    <div>
+                      <div className="settings-row-label">{n.label}</div>
+                      <div className="settings-row-desc">{n.desc}</div>
+                    </div>
+                    <label className="toggle">
+                      <input
+                        type="checkbox"
+                        checked={pendingNotifs[n.key]}
+                        onChange={(e) =>
+                          setPendingNotifs((prev) => ({ ...prev, [n.key]: e.target.checked }))
+                        }
+                      />
+                      <span className="toggle-slider" />
+                    </label>
+                  </div>
+                ))}
               </div>
+
+              {/* Data & Privacy */}
+              <div className="settings-section">
+                <div className="settings-section-title" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <Trash2 size={15} /> Data &amp; Privacy
+                </div>
+
+                {/* Export */}
+                <div className="settings-row">
+                  <div>
+                    <div className="settings-row-label">Export My Data</div>
+                    <div className="settings-row-desc">Download all your analyses as JSON</div>
+                  </div>
+                  <button
+                    id="settings-export-btn"
+                    className="export-btn"
+                    onClick={handleExport}
+                    disabled={exporting}
+                    style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}
+                  >
+                    {exporting ? (
+                      <><span className="login-spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> Exporting…</>
+                    ) : exportDone ? (
+                      <><CheckCircle size={13} /> Done!</>
+                    ) : (
+                      <><Download size={13} /> Export</>
+                    )}
+                  </button>
+                </div>
+
+                {/* Delete Account */}
+                <div className="settings-row">
+                  <div>
+                    <div className="settings-row-label" style={{ color: "var(--rose)" }}>Delete Account</div>
+                    <div className="settings-row-desc">Sign out and request permanent account deletion</div>
+                  </div>
+                  <button
+                    id="settings-delete-btn"
+                    style={{
+                      background: "transparent",
+                      border: "1.5px solid var(--rose)",
+                      color: "var(--rose)",
+                      borderRadius: "8px",
+                      padding: "0.35rem 0.85rem",
+                      fontSize: "0.78rem",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.35rem",
+                      transition: "background 0.15s",
+                    }}
+                    onClick={() => setDeleteModal(true)}
+                  >
+                    <Trash2 size={12} /> Delete
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="settings-section" style={{ textAlign: "center", padding: "2.5rem 1.5rem" }}>
+              <div style={{
+                width: "48px", height: "48px", borderRadius: "50%",
+                background: "rgba(47, 111, 94, 0.12)", color: "var(--teal)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                margin: "0 auto 1rem"
+              }}>
+                <Bell size={24} strokeWidth={1.8} />
+              </div>
+              <h3 style={{ fontSize: "1.05rem", fontWeight: 700, margin: "0 0 0.5rem", color: "var(--ink)" }}>
+                Account &amp; Notification Settings
+              </h3>
+              <p style={{ margin: "0 auto 1.25rem", fontSize: "0.85rem", color: "var(--muted)", maxWidth: "340px" }}>
+                Notification preferences and data export features are available to signed-in accounts. Sign in to enable email notifications and export your detection data.
+              </p>
               <button
-                id="settings-export-btn"
-                className="export-btn"
-                onClick={handleExport}
-                disabled={exporting}
-                style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}
+                className="filter-btn-apply"
+                onClick={() => window.location.href = "/login"}
+                style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
               >
-                {exporting ? (
-                  <><span className="login-spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> Exporting…</>
-                ) : exportDone ? (
-                  <><CheckCircle size={13} /> Done!</>
-                ) : (
-                  <><Download size={13} /> Export</>
-                )}
+                Sign In to Unlock
               </button>
             </div>
-
-            {/* Delete Account */}
-            <div className="settings-row">
-              <div>
-                <div className="settings-row-label" style={{ color: "var(--rose)" }}>Delete Account</div>
-                <div className="settings-row-desc">Sign out and request permanent account deletion</div>
-              </div>
-              <button
-                id="settings-delete-btn"
-                style={{
-                  background: "transparent",
-                  border: "1.5px solid var(--rose)",
-                  color: "var(--rose)",
-                  borderRadius: "8px",
-                  padding: "0.35rem 0.85rem",
-                  fontSize: "0.78rem",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.35rem",
-                  transition: "background 0.15s",
-                }}
-                onClick={() => setDeleteModal(true)}
-              >
-                <Trash2 size={12} /> Delete
-              </button>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -362,6 +429,12 @@ export default function SettingsPage() {
           <span>{toast.message}</span>
         </div>
       )}
+
+      <AuthRequiredModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        featureName={authFeature}
+      />
     </div>
   );
 }
