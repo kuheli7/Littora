@@ -54,7 +54,9 @@ export async function saveAnalysis({
   longitude,
   locationLabel,
   userId,
+  modelUsed,
 }) {
+  const activeModelId = modelUsed || (await getActiveSystemModel());
   const { data: analysis, error: analysisError } = await supabase
     .from("analyses")
     .insert({
@@ -66,6 +68,7 @@ export async function saveAnalysis({
       longitude:       longitude      ?? null,
       location_label:  locationLabel  ?? null,
       user_id:         userId         ?? null,
+      model_used:      activeModelId  || null,
     })
     .select()
     .single();
@@ -92,41 +95,54 @@ export async function saveAnalysis({
  * Returns past analyses for a specific user (user-scoped gallery).
  * Includes detection sub-rows for each analysis.
  */
+/**
+ * Helper to ensure consistent structure for analysis rows retrieved from public.vw_analysis_details.
+ * If row has detections_map (JSONB object), populates detections array for backward compatibility.
+ */
+function formatAnalysisRow(row) {
+  if (!row) return row;
+  if (row.detections_map && !row.detections) {
+    const detections = Object.entries(row.detections_map).map(([waste_type, count]) => ({
+      waste_type,
+      count: Number(count),
+    }));
+    return { ...row, detections };
+  }
+  return row;
+}
+
+/**
+ * Returns past analyses for a specific user (user-scoped gallery).
+ * Includes detection details via consolidated database view public.vw_analysis_details.
+ */
 export async function listAnalysesByUser(userId, { limit = 100, offset = 0 } = {}) {
   const { data, error } = await supabase
-    .from("analyses")
-    .select(
-      `id, image_url, created_at, total_waste, pollution_score, severity,
-       latitude, longitude, location_label, user_id,
-       detections ( waste_type, count )`
-    )
+    .from("vw_analysis_details")
+    .select("*")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (error) throw error;
-  return data;
+  return data ? data.map(formatAnalysisRow) : [];
 }
 
 /**
  * Returns ALL analyses (all users) for the admin dashboard.
- * Most recent first. Enriches each row with the uploader's email
+ * Most recent first. Queries public.vw_analysis_details and enriches each row with the uploader's email
  * by batch-fetching user records from Supabase Auth admin API.
  */
 export async function listAllAnalysesAdmin() {
   const { data, error } = await supabase
-    .from("analyses")
-    .select(
-      `id, image_url, created_at, total_waste, pollution_score, severity,
-       latitude, longitude, location_label, user_id,
-       detections ( waste_type, count )`
-    )
+    .from("vw_analysis_details")
+    .select("*")
     .order("created_at", { ascending: false });
 
   if (error) throw error;
 
   // Collect unique user IDs and fetch their emails/names from Auth in parallel
   const uniqueUserIds = [...new Set(data.map((r) => r.user_id).filter(Boolean))];
+  const adminEmail = (process.env.VITE_ADMIN_EMAIL || process.env.ADMIN_EMAIL || "admin@littora.app").toLowerCase();
   const emailMap = {};
   const nameMap = {};
 
@@ -135,8 +151,12 @@ export async function listAllAnalysesAdmin() {
       try {
         const { data: { user }, error: ue } = await supabase.auth.admin.getUserById(uid);
         if (!ue && user) {
-          emailMap[uid] = user.email ?? null;
-          nameMap[uid]  = user.user_metadata?.full_name ?? user.email?.split("@")[0] ?? null;
+          const userEmail = user.email ?? null;
+          const rawName = user.user_metadata?.full_name?.trim();
+          const isAppAdmin = userEmail?.toLowerCase() === adminEmail;
+
+          emailMap[uid] = userEmail;
+          nameMap[uid]  = rawName || (isAppAdmin ? "Admin" : userEmail);
         }
       } catch (_) {
         // non-fatal — leave email/name as null
@@ -144,11 +164,14 @@ export async function listAllAnalysesAdmin() {
     })
   );
 
-  return data.map((row) => ({
-    ...row,
-    user_email: row.user_id ? (emailMap[row.user_id] ?? null) : null,
-    user_name:  row.user_id ? (nameMap[row.user_id] ?? null) : null,
-  }));
+  return data.map((row) => {
+    const formatted = formatAnalysisRow(row);
+    return {
+      ...formatted,
+      user_email: row.user_id ? (emailMap[row.user_id] ?? null) : null,
+      user_name:  row.user_id ? (nameMap[row.user_id] ?? null) : null,
+    };
+  });
 }
 
 /**
@@ -219,19 +242,17 @@ export async function deleteAnalysis(id) {
 
 /**
  * Returns past analyses, most recent first, for the history view.
- * Now includes location fields (backward compatible — all nullable).
+ * Queries consolidated view public.vw_analysis_details.
  */
 export async function listAnalyses({ limit = 50, offset = 0 } = {}) {
   const { data, error } = await supabase
-    .from("analyses")
-    .select(
-      "id, image_url, created_at, total_waste, pollution_score, severity, latitude, longitude, location_label"
-    )
+    .from("vw_analysis_details")
+    .select("*")
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (error) throw error;
-  return data;
+  return data ? data.map(formatAnalysisRow) : [];
 }
 
 /**
@@ -242,25 +263,41 @@ export async function listAnalyses({ limit = 50, offset = 0 } = {}) {
  * - geolocated entries for the pollution map
  * - full history list for trend charts and the history table
  *
- * Aggregation is done in JS after a single DB query — no extra dependencies needed.
+ * Queries consolidated view public.vw_analysis_details.
  */
 export async function getStats(userId = null) {
-  let query = supabase
-    .from("analyses")
-    .select(
-      `id, image_url, created_at, total_waste, pollution_score, severity,
-       latitude, longitude, location_label, user_id,
-       detections ( waste_type, count )`
-    )
+  let data = [];
+
+  // 1. Try querying public.vw_analysis_details view
+  let viewQuery = supabase
+    .from("vw_analysis_details")
+    .select("*")
     .order("created_at", { ascending: true }); // chronological — reversed below for table
 
   if (userId) {
-    query = query.eq("user_id", userId);
+    viewQuery = viewQuery.eq("user_id", userId);
   }
 
-  const { data, error } = await query;
+  const { data: viewData, error: viewError } = await viewQuery;
 
-  if (error) throw error;
+  if (!viewError && viewData) {
+    data = viewData;
+  } else {
+    // 2. Fallback query directly on public.analyses with detections join if view grants are pending
+    let fallbackQuery = supabase
+      .from("analyses")
+      .select("*, detections(*)")
+      .order("created_at", { ascending: true });
+
+    if (userId) fallbackQuery = fallbackQuery.eq("user_id", userId);
+
+    const { data: fbData, error: fbError } = await fallbackQuery;
+    if (fbError || !fbData) {
+      console.error("getStats query error:", fbError?.message || viewError?.message);
+      throw (fbError || viewError);
+    }
+    data = fbData;
+  }
 
   const totalAnalyses = data.length;
   const totalWasteAllTime = data.reduce((s, r) => s + (r.total_waste || 0), 0);
@@ -270,35 +307,105 @@ export async function getStats(userId = null) {
       )
     : 0;
 
+  const formatSev = (s) => {
+    if (!s) return "Low";
+    const str = String(s).toLowerCase();
+    if (str === "severe") return "Severe";
+    if (str === "high") return "High";
+    if (str === "moderate") return "Moderate";
+    return "Low";
+  };
+
   const severityCounts = { Low: 0, Moderate: 0, High: 0, Severe: 0 };
-  const aggregateDetections = { bottle: 0, can: 0, bag: 0, wrapper: 0 };
+  const aggregateDetections = {};
 
   for (const row of data) {
-    if (row.severity && row.severity in severityCounts) {
-      severityCounts[row.severity]++;
-    }
-    for (const d of row.detections || []) {
-      if (d.waste_type in aggregateDetections) {
-        aggregateDetections[d.waste_type] += d.count;
+    const normSev = formatSev(row.severity);
+    severityCounts[normSev]++;
+
+    if (row.detections_map && typeof row.detections_map === "object") {
+      for (const [wasteType, count] of Object.entries(row.detections_map)) {
+        const type = (wasteType || "other").toLowerCase();
+        aggregateDetections[type] = (aggregateDetections[type] || 0) + Number(count || 1);
+      }
+    } else if (Array.isArray(row.detections)) {
+      for (const d of row.detections) {
+        const type = (d.waste_type || "other").toLowerCase();
+        const count = Number(d.count || 1);
+        aggregateDetections[type] = (aggregateDetections[type] || 0) + count;
       }
     }
   }
 
   const locations = data
     .filter((r) => r.latitude != null && r.longitude != null)
-    .map((r) => ({
-      id:              r.id,
-      latitude:        r.latitude,
-      longitude:       r.longitude,
-      location_label:  r.location_label,
-      pollution_score: r.pollution_score,
-      severity:        r.severity,
-      created_at:      r.created_at,
-      total_waste:     r.total_waste,
-    }));
+    .map((r) => {
+      const detMap = {};
+      if (r.detections_map && typeof r.detections_map === "object") {
+        Object.entries(r.detections_map).forEach(([type, count]) => {
+          detMap[type.toLowerCase()] = Number(count || 1);
+        });
+      } else if (Array.isArray(r.detections)) {
+        r.detections.forEach((d) => {
+          if (d && d.waste_type) {
+            const type = d.waste_type.toLowerCase();
+            detMap[type] = (detMap[type] || 0) + Number(d.count || 1);
+          }
+        });
+      }
+
+      const labelParts = (r.location_label || "").split(",");
+      const beachName  = labelParts[0]?.trim() || "Coastal Site";
+      const cityName   = labelParts[1]?.trim() || "";
+
+      return {
+        id:              r.id,
+        latitude:        r.latitude,
+        longitude:       r.longitude,
+        location_label:  r.location_label,
+        locationLabel:   r.location_label,
+        beach:           beachName,
+        city:            cityName,
+        country:         "India",
+        pollution_score: Number(r.pollution_score || 0),
+        pollutionScore:  Number(r.pollution_score || 0),
+        severity:        formatSev(r.severity),
+        created_at:      r.created_at,
+        total_waste:     Number(r.total_waste || 0),
+        totalWaste:      Number(r.total_waste || 0),
+        image_url:       r.image_url,
+        detections:      detMap,
+      };
+    });
 
   // Reverse to newest-first for the history table
-  const history = [...data].reverse();
+  const history = data.map(formatAnalysisRow).reverse();
+
+  // Fetch waste types catalog and locations catalog directly from Postgres
+  const wasteTypesCatalog = await getWasteTypesCatalog();
+  const locationsCatalog  = await getLocationsCatalog();
+
+  // If user has no scan locations yet, populate map locations from locationsCatalog so map and cleanup page render beach hotspots
+  const displayLocations = locations.length > 0 ? locations : locationsCatalog.map((loc) => {
+    const labelParts = (loc.location_label || "").split(",");
+    return {
+      id:              loc.id,
+      latitude:        loc.latitude,
+      longitude:       loc.longitude,
+      location_label:  loc.location_label,
+      locationLabel:   loc.location_label,
+      beach:           labelParts[0]?.trim() || "Coastal Site",
+      city:            labelParts[1]?.trim() || "",
+      country:         "India",
+      pollution_score: 15,
+      pollutionScore:  15,
+      severity:        "Low",
+      created_at:      loc.created_at,
+      total_waste:     0,
+      totalWaste:      0,
+      detections:      {},
+    };
+  });
 
   return {
     totalAnalyses,
@@ -306,45 +413,66 @@ export async function getStats(userId = null) {
     avgScore,
     severityCounts,
     aggregateDetections,
-    locations,
+    locations: displayLocations,
     history,
+    wasteTypesCatalog,
+    locationsCatalog,
   };
 }
 
-export const AVAILABLE_MODELS = [
-  {
-    id: "yolov8m",
-    name: "YOLOv8 Medium",
-    tag: "Standard Baseline",
-    architecture: "YOLOv8m",
-    params: "25.9M",
-    description: "Balanced speed & precision for general coastal debris detection.",
-    badge: "Default"
-  },
-  {
-    id: "yolov11m",
-    name: "YOLOv11 Medium",
-    tag: "Enhanced Accuracy",
-    architecture: "YOLOv11m",
-    params: "20.1M",
-    description: "Enhanced feature extraction & attention mechanisms for complex or occluded waste.",
-    badge: "High Precision"
-  },
-  {
-    id: "yolov26s",
-    name: "YOLOv26 Small",
-    tag: "Ultra-Fast Edge",
-    architecture: "YOLOv26s",
-    params: "9.6M",
-    description: "Lightweight, low-latency inference optimized for real-time mobile & drone feeds.",
-    badge: "Fastest"
-  }
-];
+/**
+ * Fetches waste type definitions & recyclability metadata directly from public.waste_types in Postgres.
+ */
+export async function getWasteTypesCatalog() {
+  try {
+    const { data, error } = await supabase
+      .from("waste_types")
+      .select("id, name, category, is_recyclable, color_hex")
+      .order("category", { ascending: true });
 
-let cachedActiveModel = "yolov11m";
+    if (error || !data) return [];
+    return data;
+  } catch (_) {
+    return [];
+  }
+}
 
 /**
- * Returns the currently active AI model ID configured by the Admin.
+ * Fetches locations catalog directly from public.locations in Postgres.
+ */
+export async function getLocationsCatalog() {
+  try {
+    const { data, error } = await supabase
+      .from("locations")
+      .select("id, location_label, latitude, longitude, created_at")
+      .order("created_at", { ascending: true });
+
+    if (error || !data) return [];
+    return data;
+  } catch (_) {
+    return [];
+  }
+}
+
+/**
+ * Fetches available AI models directly from public.ai_models in Postgres.
+ */
+export async function getAvailableAiModels() {
+  try {
+    const { data, error } = await supabase
+      .from("ai_models")
+      .select("id, name, tag, architecture, params, description, badge, is_active")
+      .order("created_at", { ascending: true });
+
+    if (error || !data) return [];
+    return data;
+  } catch (_) {
+    return [];
+  }
+}
+
+/**
+ * Returns the currently active AI model ID configured by the Admin directly from Postgres.
  */
 export async function getActiveSystemModel() {
   try {
@@ -355,32 +483,45 @@ export async function getActiveSystemModel() {
       .single();
 
     if (!error && data?.value) {
-      cachedActiveModel = data.value;
+      return data.value;
     }
-  } catch (_) {
-    // Fall back to in-memory model cache
-  }
-  return cachedActiveModel;
+  } catch (_) {}
+
+  try {
+    const { data: activeModel, error: modelError } = await supabase
+      .from("ai_models")
+      .select("id")
+      .eq("is_active", true)
+      .limit(1)
+      .single();
+
+    if (!modelError && activeModel?.id) {
+      return activeModel.id;
+    }
+  } catch (_) {}
+
+  return null;
 }
 
 /**
- * Sets the system-wide active AI model ID (Admin only).
+ * Sets the system-wide active AI model ID in Postgres (Admin only).
  */
 export async function setActiveSystemModel(modelId) {
-  const isValid = AVAILABLE_MODELS.some((m) => m.id === modelId);
+  const models = await getAvailableAiModels();
+  const isValid = models.some((m) => m.id === modelId);
   if (!isValid) {
     throw new Error(`Invalid model ID: ${modelId}`);
   }
 
-  cachedActiveModel = modelId;
+  const { error: settingsError } = await supabase
+    .from("system_settings")
+    .upsert({ key: "active_ai_model", value: modelId, updated_at: new Date().toISOString() }, { onConflict: "key" });
 
-  try {
-    await supabase
-      .from("system_settings")
-      .upsert({ key: "active_ai_model", value: modelId }, { onConflict: "key" });
-  } catch (err) {
-    console.warn("Could not persist active model to system_settings:", err.message);
-  }
+  if (settingsError) throw settingsError;
+
+  // Sync active status in public.ai_models table
+  await supabase.from("ai_models").update({ is_active: false }).neq("id", "");
+  await supabase.from("ai_models").update({ is_active: true }).eq("id", modelId);
 
   return modelId;
 }

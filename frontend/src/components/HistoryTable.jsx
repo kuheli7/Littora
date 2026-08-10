@@ -4,25 +4,7 @@ import ResultPanel from "./ResultPanel.jsx";
 import { AuthContext } from "../context/AuthContext.jsx";
 import { SettingsContext } from "../context/SettingsContext.jsx";
 import AuthRequiredModal from "./AuthRequiredModal.jsx";
-
-function toResultShape(item) {
-  if (!item) return { detections: {}, total_waste: 0, pollution_score: 0, severity: "Low" };
-  const detections = {};
-  if (Array.isArray(item.detections)) {
-    for (const d of item.detections) {
-      detections[d.waste_type || d.type] = d.count;
-    }
-  } else if (item.detections && typeof item.detections === "object") {
-    Object.assign(detections, item.detections);
-  }
-  return {
-    detections,
-    total_waste: item.total_waste || 0,
-    pollution_score: item.pollution_score || 0,
-    severity: item.severity || "Low",
-    boxes: item.boxes || [],
-  };
-}
+import { toResultShape, formatWasteType } from "../utils/wasteUtils.js";
 
 /**
  * HistoryTable — sortable + paginated table of analyses.
@@ -182,7 +164,7 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
               </td>
               <td>
                 <span className={`waste-badge waste-${(row.topType || row.waste_type || 'unknown').toLowerCase()}`}>
-                  {row.topType || row.waste_type || 'Unknown'}
+                  {formatWasteType(row.topType || row.waste_type)}
                 </span>
               </td>
               <td>
@@ -202,11 +184,7 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
                     style={{ fontSize: "0.78rem", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "4px" }}
                   >
                     <User size={12} />
-                    {row.user_name || (row.user_email
-                      ? row.user_email.split("@")[0]
-                      : row.user_id
-                        ? row.user_id.slice(0, 8) + "…"
-                        : "Anon")}
+                    {row.user_name || row.user_email || (row.user_id ? row.user_id.slice(0, 8) + "…" : "Anon")}
                   </span>
                 </td>
               )}
@@ -299,7 +277,7 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
                 <div className="admin-card-user" style={{ marginBottom: "0.5rem", fontSize: "0.85rem" }}>
                   <User size={14} style={{ display: "inline", marginRight: "4px" }} />
                   Uploaded by: <strong title={selectedRow.user_email || selectedRow.user_id}>
-                    {selectedRow.user_name || (selectedRow.user_email ? selectedRow.user_email.split("@")[0] : (selectedRow.user_id?.slice(0, 12) + "…"))}
+                    {selectedRow.user_name || selectedRow.user_email || (selectedRow.user_id?.slice(0, 12) + "…")}
                   </strong>
                 </div>
               )}

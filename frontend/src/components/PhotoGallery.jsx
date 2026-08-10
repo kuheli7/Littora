@@ -1,20 +1,7 @@
 import { useState } from "react";
-import { User, Trash2, Loader2 } from "lucide-react";
-import { X } from "lucide-react";
+import { User, Trash2, Loader2, X } from "lucide-react";
 import ResultPanel from "./ResultPanel.jsx";
-
-/**
- * Reshapes the detections array from /api/stats format
- * [{ waste_type: "bottle", count: 5 }]  →  { bottle: 5, can: 0, ... }
- * so it matches the shape ResultPanel expects.
- */
-function toResultShape(row) {
-  const detections = { bottle: 0, can: 0, bag: 0, wrapper: 0 };
-  for (const d of row.detections || []) {
-    if (d.waste_type in detections) detections[d.waste_type] = d.count;
-  }
-  return { ...row, detections };
-}
+import { toResultShape } from "../utils/wasteUtils.js";
 
 export default function PhotoGallery({ items, showUser = false, onDeleteRequest, deletingId }) {
   const [modalItem, setModalItem] = useState(null);
@@ -142,7 +129,7 @@ export default function PhotoGallery({ items, showUser = false, onDeleteRequest,
                 <div className="admin-card-user" style={{ marginBottom: "0.5rem", fontSize: "0.85rem" }}>
                   <User size={14} style={{ display: "inline", marginRight: "4px" }} />
                   Uploaded by: <strong title={modalItem.user_email || modalItem.user_id}>
-                    {modalItem.user_name || (modalItem.user_email ? modalItem.user_email.split("@")[0] : (modalItem.user_id?.slice(0, 12) + "…"))}
+                    {modalItem.user_name || modalItem.user_email || (modalItem.user_id?.slice(0, 12) + "…")}
                   </strong>
                 </div>
               )}

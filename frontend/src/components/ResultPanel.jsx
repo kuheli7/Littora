@@ -4,8 +4,7 @@ import {
   ResponsiveContainer, Legend,
 } from "recharts";
 import { useTheme } from "../context/ThemeContext.jsx";
-
-const RECYCLABLE_TYPES = new Set(["bottle", "can"]);
+import { normalizeDetections, formatWasteType, isRecyclableWaste } from "../utils/wasteUtils.js";
 
 const PIE_COLORS = {
   earth: {
@@ -21,17 +20,21 @@ const PIE_COLORS = {
 export default function ResultPanel({ result }) {
   const { theme } = useTheme();
   const activePalette = theme === "dark" ? PIE_COLORS.dark : PIE_COLORS.earth;
-  const { detections = {}, total_waste = 0, pollution_score = 0, severity = "Low" } = result || {};
+  const { total_waste = 0, pollution_score = 0, severity = "Low" } = result || {};
 
-  const barData = Object.entries(detections).map(([type, count]) => ({
-    type: type.charAt(0).toUpperCase() + type.slice(1),
+  const normalizedDetections = normalizeDetections(result?.detections);
+  const wasteCatalog = result?.wasteTypesCatalog || [];
+
+  const barData = Object.entries(normalizedDetections).map(([type, count]) => ({
+    type: formatWasteType(type),
     count,
   }));
 
   let recyclable = 0;
   let nonRecyclable = 0;
-  for (const [type, count] of Object.entries(detections)) {
-    if (RECYCLABLE_TYPES.has(type.toLowerCase())) recyclable += count;
+
+  for (const [type, count] of Object.entries(normalizedDetections)) {
+    if (isRecyclableWaste(type, wasteCatalog)) recyclable += count;
     else nonRecyclable += count;
   }
 
