@@ -1,687 +1,262 @@
-# AGENTS.md
+# Littora Project Guidelines
 
-## 1. Core Operating Hierarchy
+## 1. Project Architecture
 
-Follow this order for every task:
+Littora is a three-tier system:
 
-```text
-1. Follow the user's request and constraints
-2. Determine the task type
-3. Use Memory only when prior project context matters
-4. Use CodeGraph for repository discovery
-5. Read only relevant files
-6. Use WebSearch only for external/current information
-7. Make the smallest correct change
-8. Run proportionate validation/tests
-9. Update required documentation
-10. Never commit or push without explicit approval
-```
+React Frontend
+↓
+Node.js / Express API
+↓
+FastAPI AI Service
+↓
+Supabase PostgreSQL / Storage
 
-Use the minimum tools necessary. Do not invoke a tool merely because it is available.
+Keep these service boundaries intact.
 
----
+The frontend should communicate through the Node.js API rather than bypassing the backend to call internal services directly.
 
-# 2. Tool Selection
+AI inference belongs in the FastAPI AI service.
 
-## 2.1 Memory MCP
+Before changing shared interfaces, inspect affected callers and consumers and preserve existing contracts unless the requested change requires otherwise.
 
-Memory stores **durable project context**, not source code.
+## 2. Code Changes
 
-Use Memory when the task depends on:
-
-* Previous architecture decisions
-* Design decisions
-* Important project constraints
-* Established conventions
-* Technology choices
-* Approved implementation approaches
-* Important debugging conclusions
-* Decisions made in previous sessions
-* Durable user preferences for this repository
-
-Examples:
-
-```text
-"What architecture did we decide on?"
-"Why did we choose this approach?"
-"What constraints should I remember?"
-"What did we decide about authentication?"
-```
-
-### Do not use Memory unnecessarily
-
-Do not query Memory for simple implementation questions when the answer is present in the repository.
-
-Do not store:
-
-* Source-code files or large snippets
-* Temporary logs
-* Build output
-* Trivial implementation details
-* Guesses
-* Unverified assumptions
-* Secrets, passwords, tokens, API keys, or credentials
-
-### Memory authority
-
-For current implementation:
-
-```text
-Repository > Memory
-```
-
-For the latest explicit user instruction:
-
-```text
-Latest user instruction > Older Memory
-```
-
-If Memory is stale, update or supersede it when appropriate.
-
-### Writing Memory
-
-Only store concise, verified, durable facts.
-
-```text
-Investigate → Verify → Store durable conclusion
-```
-
-Do not permanently store speculation.
-
----
-
-# 3. CodeGraph
-
-CodeGraph is the primary tool for discovering the repository.
-
-Use it first for:
-
-* Unknown files or symbols
-* Function/class discovery
-* Call chains
-* Dependency relationships
-* Data flow
-* Architecture discovery
-* Impact analysis
-* Cross-file relationships
-* Tracing APIs and services
-
-Preferred flow:
-
-```text
-CodeGraph
-    ↓
-Identify relevant symbols/files
-    ↓
-Read those files directly
-    ↓
-Reason from actual implementation
-```
-
-Do not scan the entire repository when targeted discovery is sufficient.
-
-### Skip CodeGraph
-
-If the user gives an exact file and location and no dependency or relationship analysis is required, read the file directly.
-
-### Fallback
-
-If CodeGraph fails, times out, or is insufficient:
-
-```text
-Targeted filesystem/search tools
-    ↓
-Targeted file reads
-```
-
-Do not repeatedly retry a failing tool unnecessarily.
-
----
-
-# 4. WebSearch
-
-WebSearch is for **external, current, or independently verified information**.
-
-## Use WebSearch when:
-
-* The user explicitly asks for web research
-* Current documentation is required
-* Current API behavior matters
-* Latest package/version information matters
-* Compatibility needs verification
-* External service behavior needs confirmation
-* Current security guidance is needed
-* Repository information is insufficient
-
-## Do not use WebSearch for ordinary repository questions
-
-For:
-
-```text
-"How does this API work?"
-"How does auth work?"
-"Where is this function called?"
-"Trace the upload flow."
-"Why does this component behave this way?"
-```
-
-use:
-
-```text
-CodeGraph → targeted file reads → answer
-```
-
-Do not search generic documentation merely because terms such as FastAPI, Supabase, React, Express, YOLO, or PyTorch appear in the question.
-
-## External dependency verification
-
-When external behavior matters:
-
-```text
-Inspect local implementation
-    ↓
-Identify exact external behavior needed
-    ↓
-Search authoritative documentation
-    ↓
-Compare with local implementation
-```
-
-Clearly distinguish:
-
-```text
-What this repository does
-```
-
-from:
-
-```text
-What the external dependency supports/recommends
-```
-
-Prefer official documentation and primary sources.
-
-Cite external sources when they materially contribute to the answer.
-
----
-
-# 5. Standard Investigation Strategy
-
-For non-trivial tasks:
-
-```text
-Understand request
-    ↓
-Determine whether it is:
-  - local
-  - external/current
-  - mixed
-    ↓
-Use Memory if historical context matters
-    ↓
-Use CodeGraph for repository discovery
-    ↓
-Read relevant files
-    ↓
-Form a concrete hypothesis
-    ↓
-Make the smallest correct change
-    ↓
-Run targeted validation
-    ↓
-Run broader tests when risk warrants it
-    ↓
-Update documentation when required
-```
-
-Avoid unnecessary parallel tool calls, repository scans, and repeated reads.
-
----
-
-# 6. Code Change Discipline
-
-Make the smallest change that solves the requested problem.
+Make the smallest correct change required by the task.
 
 Do not:
 
-* Refactor unrelated code
-* Reformat unrelated files
-* Rename unrelated symbols
-* Replace working dependencies without justification
-* Rewrite whole modules for localized problems
-* Introduce abstractions without a concrete need
-* Change public interfaces unless required
-
-Before changing shared logic, inspect relevant callers and consumers.
+* refactor unrelated code
+* reformat unrelated files
+* rename unrelated symbols
+* rewrite whole modules for localized fixes
+* introduce abstractions without a concrete need
+* change public interfaces without justification
 
 Preserve existing behavior outside the requested scope.
 
----
+For cross-service changes, verify the complete affected data flow rather than modifying only one side of the interface.
 
-# 7. Supabase Database Schema
+## 3. Database and Supabase
 
 All schema changes must use incremental migrations:
 
-```text
 supabase/migrations/<timestamp>_<name>.sql
-```
 
-Never execute ad-hoc production DDL.
+Never use ad-hoc production DDL.
 
-Pushing migrations to GitHub is the deployment mechanism for Supabase schema changes in this project.
+Do not weaken Row Level Security to make a query pass.
 
-## Views and RLS
+Security-sensitive views must preserve the project's security-invoker design where required.
 
-Security-sensitive views such as:
+For application-side data operations:
 
-```text
-vw_analysis_details
-```
+* use the existing Node.js / Supabase client patterns
+* keep privileged service credentials server-side
+* never expose service keys or other secrets to frontend code
+* make scripts deterministic and safely rerunnable where practical
 
-must use:
-
-```sql
-WITH (security_invoker = true)
-```
-
-where required by the security architecture.
-
-Never weaken RLS simply to make a query pass.
-
----
-
-# 8. Supabase Data Operations
-
-For DML, updates, and batch backfills:
-
-* Use Node.js scripts
-* Use `@supabase/supabase-js`
-* Load environment variables with `dotenv/config`
-* Use the service key only for server-side privileged operations
-* Never expose service credentials to frontend code
-
-Scripts should be deterministic and safe to rerun where practical.
-
----
-
-# 9. Authentication and Security
+## 4. Authentication and Authorization
 
 Treat authentication and authorization as security-sensitive.
 
-When modifying or investigating authentication:
+When modifying authentication or protected resources, trace the relevant flow across:
 
-```text
-Frontend auth state
-    ↓
-Login/session handling
-    ↓
+Frontend auth/session
+↓
 Backend middleware
-    ↓
+↓
 Routes/services
-    ↓
+↓
 Supabase integration
-    ↓
-Authorization / ownership / roles
-    ↓
-Protected resources
-```
+↓
+Ownership / role checks
+↓
+Protected resource
 
-Verify authentication and authorization separately.
+Always distinguish:
 
-Do not assume:
+Authenticated != Authorized
 
-```text
-Authenticated = Authorized
-```
+Verify relevant success and failure paths, including:
 
-Test:
+* missing or invalid credentials
+* expired credentials
+* unauthorized access
+* ownership violations
+* role restrictions
 
-* Valid authentication
-* Missing authentication
-* Invalid/expired credentials
-* Unauthorized access
-* Ownership violations
-* Role restrictions
-* Failure paths
+Never log passwords, tokens, service keys, or other secrets.
 
-Never log passwords, tokens, service keys, or secrets.
+## 5. AI Service
 
----
+The FastAPI AI service uses the existing pytest-based testing stack.
 
-# 10. AI Service Testing
+Prefer tests that exercise real application behavior rather than excessive mocking.
 
-The FastAPI + PyTorch service should use:
+When modifying inference, model selection, preprocessing, or model fallback behavior, cover both normal and failure paths.
 
-* `pytest`
-* `pytest-asyncio`
-* `httpx`
-* `ASGITransport`
-* Shared fixtures in `conftest.py`
-* `@pytest.mark.parametrize` where useful
+The AI service must preserve:
 
-Prefer tests that exercise real application behavior over excessive mocking.
+* normalized detection output
+* safe model resolution and fallback behavior
+* correct bounding-box handling
+* appropriate error responses for invalid input
+* existing concurrency and thread-safety guarantees
 
-Cover:
+When fixing a bug, add or strengthen a regression test that would fail if the bug returns.
 
-* Successful requests
-* Invalid input
-* Unauthorized requests
-* Missing resources
-* Malformed payloads
-* Boundary conditions
-* Error handling
-* Model/inference failures
-* Relevant integration paths
+## 6. UI Invariants
 
----
-
-# 11. Test Veracity
-
-Tests must verify application behavior rather than mock configuration.
-
-Avoid tautologies such as:
-
-```text
-assert mock.return_value == mock.return_value
-```
-
-Tests should fail when real application logic is intentionally broken.
-
-Prefer:
-
-* Real HTTP status assertions
-* Real response assertions
-* Negative-path tests
-* Boundary tests
-* Unauthorized access tests
-* Regression tests
-* Mutation-resistant checks
-
-When fixing a bug, add or strengthen a test that would catch the regression.
-
----
-
-# 12. UI and Lightbox Invariants
-
-Photo inspection modals must never crop images.
+Detection images must never be cropped during inspection.
 
 Use:
 
-```css
 object-fit: contain;
-```
 
-Use `BoundingBoxImage.jsx` for normalized YOLO bounding boxes and category badges.
+Use the existing BoundingBoxImage.jsx flow for normalized YOLO bounding boxes and category badges.
 
-## Map Multi-Scan Inspection
+For multi-scan map inspection:
 
-When multiple analyses share a geographic coordinate or label:
+* severity should reflect the worst relevant analysis
+* all individual analyses at the location must remain accessible
+* each scan should expose its thumbnail, severity, score, timestamp, and inspection action
 
-* Pin color reflects peak/worst severity.
-* Popup shows every individual analysis.
-* Each scan includes:
+Do not hide non-peak scans.
 
-  * Thumbnail
-  * Severity
-  * Score
-  * Timestamp
-  * Inspection action
-
-Never hide non-peak scans.
-
----
-
-# 13. Authentic Data and Role Scoping
+## 7. Authentic Data and Role Scoping
 
 Never fabricate application data.
 
-Do not create:
+Do not introduce:
 
-* Phantom map markers
-* Fake analyses
-* Hardcoded scores presented as real data
-* Synthetic severities
-* Fake GPS records
+* fake analyses
+* fake GPS coordinates
+* fabricated map markers
+* synthetic severity values presented as real data
+* hardcoded statistics presented as live data
 
-When real records do not exist, render an authentic empty state.
+When real records do not exist, use an authentic empty state.
 
-## `/api/stats`
+For /api/stats, regular users must receive only data permitted by the authorization model, including their own scan locations.
 
-Regular users must receive:
+Do not substitute global location data for user-scoped location data.
 
-```text
-Personal statistics
-+
-Only their own scan locations
-```
+Administrative views may expose global data only where explicitly authorized by the existing role model.
 
-Never replace:
+## 8. Testing
 
-```text
-userStats.locations
-```
+Run tests proportionate to the change.
 
-with:
+For small changes, run targeted tests.
 
-```text
-globalStats.locations
-```
+For cross-module, security, or schema changes, run targeted tests followed by broader relevant tests.
 
-Administrators may receive global platform data according to the authorization model.
+Do not report test results or counts that were not actually verified.
 
-UI titles/subtitles must dynamically reflect the active role.
+For bug fixes, ensure the regression is covered by an appropriate test.
 
----
+## 9. Documentation
 
-# 14. Multi-Agent Work
+Update relevant project documentation when externally visible behavior, setup, configuration, APIs, or major capabilities change.
 
-When a task has genuinely independent domains, parallelize them.
+Relevant documentation includes:
 
-Typical domains:
+* README.md
+* backend/README.md
+* frontend/README.md
+* ai-service/README.md
 
-```text
-Frontend
-Backend
-AI Service
-Database
-Testing
-Documentation
-```
+Do not update documentation merely because an internal implementation changed unless the documented behavior is affected.
 
-Do not parallelize tightly coupled edits that are likely to conflict.
+## 10. Dependencies and Environment
 
-After parallel work:
+Before adding a dependency:
 
-```text
-Review findings
-    ↓
-Resolve inconsistencies
-    ↓
-Integrate changes
-    ↓
-Run validation
-```
+1. Check whether the existing stack already provides the required capability.
+2. Prefer the project's established dependencies.
+3. Verify compatibility where necessary.
+4. Avoid dependencies for trivial functionality.
+5. Update manifests and relevant documentation.
+6. Run relevant tests.
 
----
+Never commit:
 
-# 15. Documentation
+* .env
+* API keys
+* service keys
+* passwords
+* tokens
+* private credentials
 
-When capabilities or behavior change, update the relevant documentation before committing.
+Use environment variables and .env.example.
 
-Relevant files:
-
-```text
-README.md
-backend/README.md
-frontend/README.md
-ai-service/README.md
-```
-
-Keep documentation synchronized with:
-
-* Features
-* Directory structure
-* Configuration
-* APIs
-* Setup instructions
-* Testing instructions
-
-Only report test counts that were actually verified.
-
----
-
-# 16. Git
+## 11. Git
 
 Never commit or push without explicit user approval.
 
 Do not create intermediate commits autonomously.
 
-Before requesting approval to commit:
+Before requesting commit approval:
 
-```text
-Changes complete
-    ↓
-Documentation updated
-    ↓
-Tests run
-    ↓
-Final diff inspected
-    ↓
-Secrets/accidental files checked
-    ↓
-Ask for explicit commit approval
-```
+* inspect the final diff
+* verify relevant tests
+* check documentation when required
+* check for secrets or accidental files
 
 Do not push unless explicitly requested.
 
-## Commit messages
+Use human-readable commit titles and concise bullets rather than conventional commit prefixes.
 
-Do not use conventional prefixes such as:
+## 12. Error Diagnosis
 
-```text
-feat:
-fix:
-chore:
-refactor:
-```
+For bugs and failures:
 
-Use a human-readable title followed by concise bullets.
-
-Example:
-
-```text
-Harden authentication across protected API routes
-
-- Validate authenticated users in middleware
-- Enforce ownership checks for analysis records
-- Add unauthorized access tests
-- Update backend documentation
-```
-
----
-
-# 17. Dependencies and Environment
-
-Before adding a dependency:
-
-1. Check whether existing dependencies already solve the problem.
-2. Prefer the project's current stack.
-3. Verify compatibility when required.
-4. Avoid dependencies for trivial functionality.
-5. Update manifests and documentation.
-6. Run relevant tests.
-
-Never commit:
-
-```text
-.env
-API keys
-Service keys
-Passwords
-Tokens
-Private credentials
-```
-
-Use environment variables and `.env.example`.
-
----
-
-# 18. Error Diagnosis
-
-Use:
-
-```text
 Reproduce
-    ↓
+↓
 Locate failing boundary
-    ↓
-Inspect actual inputs/outputs
-    ↓
+↓
+Inspect actual inputs and outputs
+↓
 Identify root cause
-    ↓
+↓
 Fix root cause
-    ↓
+↓
 Add regression coverage
-    ↓
+↓
 Retest
-```
 
-Do not hide failures simply to make the application appear healthy.
+Do not suppress failures merely to make the application appear healthy.
 
-Avoid broad exception handling without a meaningful recovery strategy.
+Avoid broad exception handling unless it provides a meaningful recovery strategy.
 
----
+## 13. Current Source Over Historical Context
 
-# 19. Final Tool Decision Matrix
+For current implementation behavior, trust the repository and tests over stale historical information.
 
-| Request                                                       | Primary           | Secondary                                        |
-| ------------------------------------------------------------- | ----------------- | ------------------------------------------------ |
-| How does our API work?                                        | CodeGraph + files | Memory if historical context matters             |
-| How does auth work?                                           | CodeGraph + files | WebSearch for current external/security guidance |
-| Where is this function used?                                  | CodeGraph         | Targeted file reads                              |
-| Trace request/data flow                                       | CodeGraph         | Targeted file reads                              |
-| Why did we choose this architecture?                          | Memory            | Repository                                       |
-| What decision did we make previously?                         | Memory            | Repository                                       |
-| What does current Supabase documentation recommend?           | WebSearch         | Repository                                       |
-| Is our implementation aligned with current Supabase guidance? | CodeGraph + files | WebSearch                                        |
-| What is the latest package/API behavior?                      | WebSearch         | Repository                                       |
-| Exact file/location edit                                      | Direct file read  | Tests                                            |
-| Memory conflicts with current code                            | Repository        | Memory                                           |
+For project decisions and historical rationale, use persistent project context when available.
 
----
+When an existing project decision conflicts with the current user request, follow the user's latest explicit requirement unless doing so would violate a higher-priority security or architectural constraint.
 
-# 20. Core Source-of-Truth Model
+## 14. Tool Chain
 
-Always use each source for the job it is best at:
+For any task that involves tracing, understanding, or explaining relationships
+between files, symbols, callers, callees, execution paths, or dependencies —
+use this sequence:
 
-```text
-CODEGRAPH
-"What code exists and how is it connected?"
+Memory MCP first (historical context and architectural decisions)
+↓
+CodeGraph MCP (symbol search, callers, callees, execution paths, working set)
+↓
+Targeted view_file on files CodeGraph identified
+↓
+Determine approach and act
 
-MEMORY
-"What durable context, decisions, and constraints do we remember?"
+Do not use list_dir, find_by_name, grep_search, or broad filesystem discovery
+to locate files or symbols that CodeGraph can identify.
 
-FILES
-"What does the actual source text say?"
+list_dir chains are broad filesystem discovery. They are forbidden as a
+substitute for CodeGraph when CodeGraph can answer the question.
 
-WEBSEARCH
-"What does the current external world/documentation say?"
-```
-
-Priority for current implementation:
-
-```text
-Actual repository
-    >
-Memory
-```
-
-Priority for current user intent:
-
-```text
-Latest explicit user instruction
-    >
-Older project context
-```
-
-Never use a more expensive or broader tool when a narrower reliable source is sufficient.
+Use filesystem search only when CodeGraph is unavailable or explicitly
+cannot answer the question.
