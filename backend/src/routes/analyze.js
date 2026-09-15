@@ -1,47 +1,76 @@
 import { Router } from "express";
 import multer from "multer";
+import rateLimit from "express-rate-limit";
 
 import { runDetection } from "../services/aiService.js";
 import {
-  supabase,
   uploadImage,
   saveAnalysis,
   getActiveSystemModel,
 } from "../services/supabaseClient.js";
+import { optionalAuth } from "../middleware/auth.js";
+import { validateImageBuffer } from "../middleware/fileValidation.js";
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage() });
+
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20, // limit each IP to 20 uploads per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many upload requests. Please try again after a minute." },
+});
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB limit
+  fileFilter: (_req, file, cb) => {
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+    cb(null, allowed.includes(file.mimetype.toLowerCase()));
+  },
+});
+
+const handleUpload = (req, res, next) => {
+  upload.single("image")(req, res, (err) => {
+    if (err) {
+      if (err instanceof multer.MulterError || err?.name === "MulterError") {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(413).json({ error: "File size exceeds 10MB limit" });
+        }
+        return res.status(400).json({ error: err.message || "Invalid multipart form data" });
+      }
+      return next(err);
+    }
+    next();
+  });
+};
 
 // POST /api/analyze — multipart/form-data, field name "image"
 // Optional extra fields: latitude, longitude, location_label (all nullable)
 // Optional header: Authorization: Bearer <jwt>  → tags upload with user_id
-router.post("/", upload.single("image"), async (req, res) => {
+router.post("/", uploadLimiter, optionalAuth, handleUpload, async (req, res) => {
   if (!req.file) {
     return res
       .status(400)
-      .json({ error: "No image file provided (field name: image)" });
+      .json({ error: "No image file provided (field name: image). Allowed formats: JPEG, PNG, WebP (max 10MB)" });
+  }
+
+  const validation = validateImageBuffer(req.file.buffer);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.error });
   }
 
   try {
-    const { buffer, originalname, mimetype } = req.file;
+    const { buffer, originalname } = req.file;
+    const mimetype = validation.mime;
 
-    // Parse optional location fields — don't fail if absent
-    const latitude      = req.body.latitude      ? parseFloat(req.body.latitude)  : null;
-    const longitude     = req.body.longitude     ? parseFloat(req.body.longitude) : null;
-    const locationLabel = req.body.location_label || null;
-
-    // Extract user_id from JWT if present (optional — upload works anonymously too)
-    let userId = null;
-    const authHeader = req.headers.authorization;
-    if (authHeader?.startsWith("Bearer ")) {
-      try {
-        const token = authHeader.slice(7);
-        const { data } = await supabase.auth.getUser(token);
-        userId = data?.user?.id ?? null;
-      } catch {
-        // Non-fatal: upload still proceeds without user attribution
-      }
-    }
+    // Parse optional location fields with bounds checking
+    const rawLat = req.body.latitude ? parseFloat(req.body.latitude) : null;
+    const rawLng = req.body.longitude ? parseFloat(req.body.longitude) : null;
+    const latitude = (rawLat !== null && !isNaN(rawLat) && rawLat >= -90 && rawLat <= 90) ? rawLat : null;
+    const longitude = (rawLng !== null && !isNaN(rawLng) && rawLng >= -180 && rawLng <= 180) ? rawLng : null;
+    const locationLabel = req.body.location_label?.trim() || null;
+    const userId = req.user?.id ?? null;
 
     // 1. Fetch current active AI model configured by Admin
     const activeModel = await getActiveSystemModel();
@@ -49,24 +78,25 @@ router.post("/", upload.single("image"), async (req, res) => {
     // 2. Run inference using active model
     const result = await runDetection(buffer, originalname, mimetype, activeModel);
 
-    // 2. Persist the image to Supabase Storage
+    // 3. Persist the image to Supabase Storage
     const imageUrl = await uploadImage(buffer, originalname, mimetype);
 
-    // 3. Write analysis + detections rows to Postgres
+    // 4. Write analysis + detections rows to Postgres
     const analysis = await saveAnalysis({
       imageUrl,
       totalWaste:     result.total_waste,
       pollutionScore: result.pollution_score,
       severity:       result.severity,
       detections:     result.detections,
+      boxes:          result.boxes || [],
       latitude,
       longitude,
       locationLabel,
       userId,
+      modelUsed: result.model_used || activeModel,
     });
 
-    // 4. Return the combined response React expects
-    //    (existing fields unchanged; new location + user fields added)
+    // 5. Return the combined response React expects
     res.json({
       id:              analysis.id,
       image_url:       imageUrl,

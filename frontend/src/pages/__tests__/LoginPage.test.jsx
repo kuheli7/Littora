@@ -6,11 +6,13 @@ import { MemoryRouter } from "react-router-dom";
 vi.mock("../../lib/supabase.js", () => ({
   supabase: {
     auth: {
-      getSession:         vi.fn().mockResolvedValue({ data: { session: null } }),
-      onAuthStateChange:  vi.fn().mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } }),
-      signInWithPassword: vi.fn(),
-      signUp:             vi.fn(),
-      signOut:            vi.fn(),
+      getSession:            vi.fn().mockResolvedValue({ data: { session: null } }),
+      onAuthStateChange:     vi.fn().mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } }),
+      signInWithPassword:    vi.fn(),
+      signUp:                vi.fn(),
+      signOut:               vi.fn(),
+      resetPasswordForEmail: vi.fn(),
+      resend:                vi.fn(),
     },
   },
 }));
@@ -258,11 +260,11 @@ describe("LoginPage — signup flow", () => {
     openSignup();
     fireEvent.change(screen.getByLabelText(/^password/i), { target: { value: "weak" } });
     // "weak" password (only 4 chars) → strength score=0 → label is empty string from STRENGTH_LABELS[0]
-    // So instead check that the strength bar segments render
-    const segs = document.querySelectorAll(".pw-strength-seg");
+    // Check that the strength bar segments render
+    const segs = screen.getAllByTestId("pw-strength-seg");
     expect(segs.length).toBe(4);
     // pw-strength-wrap should be visible now that password.length > 0
-    expect(document.querySelector(".pw-strength-wrap")).toBeInTheDocument();
+    expect(screen.getByTestId("pw-strength-wrap")).toBeInTheDocument();
   });
 
   it("shows 'Strong' strength label for a complex password", () => {
@@ -293,5 +295,88 @@ describe("LoginPage — signup flow", () => {
     const guestBtn = screen.getByRole("button", { name: /continue as guest/i });
     expect(guestBtn).toBeInTheDocument();
     fireEvent.click(guestBtn);
+  });
+
+  it("allows resending verification email from the sign-up success view", async () => {
+    supabase.auth.signUp.mockResolvedValueOnce({
+      data: { user: { id: "resend-id", identities: [{ id: "i" }] } },
+      error: null,
+    });
+    supabase.auth.resend.mockResolvedValueOnce({ error: null });
+
+    openSignup();
+    fireEvent.change(screen.getByLabelText(/email address/i),    { target: { value: "verify@test.com" } });
+    fireEvent.change(screen.getByLabelText(/^password/i),        { target: { value: "pass123" } });
+    fireEvent.change(screen.getByLabelText(/confirm password/i), { target: { value: "pass123" } });
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
+
+    await waitFor(() => screen.getByText(/check your inbox/i));
+    const resendBtn = screen.getByRole("button", { name: /resend verification link/i });
+    expect(resendBtn).toBeInTheDocument();
+
+    fireEvent.click(resendBtn);
+    await waitFor(() =>
+      expect(screen.getByText(/verification link dispatched to verify@test.com via resend/i)).toBeInTheDocument()
+    );
+    expect(supabase.auth.resend).toHaveBeenCalledWith({
+      type: "signup",
+      email: "verify@test.com",
+      options: {
+        emailRedirectTo: `${window.location.origin}/login?verified=true`,
+      },
+    });
+  });
+
+  it("shows resend link option when login fails due to unconfirmed email", async () => {
+    supabase.auth.signInWithPassword.mockResolvedValueOnce({
+      data: null,
+      error: { message: "Email not confirmed" },
+    });
+    supabase.auth.resend.mockResolvedValueOnce({ error: null });
+
+    renderLogin();
+    fireEvent.change(screen.getByLabelText(/email address/i), { target: { value: "pending@test.com" } });
+    fireEvent.change(screen.getByLabelText(/^password/i),     { target: { value: "pass123" } });
+    fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/email not confirmed/i)).toBeInTheDocument()
+    );
+
+    const resendPromptBtn = screen.getByRole("button", { name: /resend verification link/i });
+    expect(resendPromptBtn).toBeInTheDocument();
+
+    fireEvent.click(resendPromptBtn);
+    await waitFor(() =>
+      expect(screen.getByText(/verification link dispatched to pending@test.com via resend/i)).toBeInTheDocument()
+    );
+  });
+
+  it("renders email verified banner when url has ?verified=true", () => {
+    render(
+      <MemoryRouter initialEntries={["/login?verified=true"]}>
+        <SettingsProvider>
+          <AuthProvider>
+            <LoginPage />
+          </AuthProvider>
+        </SettingsProvider>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/email verified successfully!/i)).toBeInTheDocument();
+  });
+
+  it("renders account deleted banner when url has ?deleted=true", () => {
+    render(
+      <MemoryRouter initialEntries={["/login?deleted=true"]}>
+        <SettingsProvider>
+          <AuthProvider>
+            <LoginPage />
+          </AuthProvider>
+        </SettingsProvider>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/account successfully deleted/i)).toBeInTheDocument();
   });
 });

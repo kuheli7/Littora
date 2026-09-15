@@ -5,15 +5,11 @@ import { useStats } from "../context/StatsContext.jsx";
 import { useAuth }  from "../context/AuthContext.jsx";
 import UploadForm  from "../components/UploadForm.jsx";
 import ResultPanel from "../components/ResultPanel.jsx";
-
-import { DEFAULT_AI_MODELS } from "../utils/wasteUtils.js";
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
-const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || "admin@littora.app";
+import { API_BASE, DEFAULT_AI_MODELS } from "../utils/wasteUtils.js";
 
 export default function UploadPage() {
   const { loadStats }  = useStats();
-  const { user, getToken } = useAuth();
+  const { getToken, isAdmin } = useAuth();
   const [result,  setResult]  = useState(null);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState(null);
@@ -25,8 +21,6 @@ export default function UploadPage() {
     availableModels: DEFAULT_AI_MODELS,
   });
   const [updatingModel, setUpdatingModel] = useState(false);
-
-  const isAdmin = user && user.email === ADMIN_EMAIL;
 
   useEffect(() => {
     fetchModelInfo();
@@ -74,8 +68,8 @@ export default function UploadPage() {
     const formData = new FormData();
     formData.append("image", file);
     if (coords) {
-      if (coords.latitude)  formData.append("latitude",  coords.latitude);
-      if (coords.longitude) formData.append("longitude", coords.longitude);
+      if (coords.latitude != null)  formData.append("latitude",  coords.latitude);
+      if (coords.longitude != null) formData.append("longitude", coords.longitude);
       if (coords.locationLabel) formData.append("location_label", coords.locationLabel);
     }
 
@@ -98,17 +92,17 @@ export default function UploadPage() {
   }
 
   return (
-    <div className="page-container">
-      <div className="page-heading">
-        <h1>Detect Waste</h1>
-        <p>Upload or capture a beach photo to detect waste using AI.</p>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <div>
+        <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-text-primary tracking-tight">Detect Waste</h1>
+        <p className="text-xs sm:text-sm text-text-muted mt-1">Upload or capture a beach photo to detect waste using AI.</p>
       </div>
 
-      <div className="upload-layout">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.4fr)_minmax(360px,1fr)] gap-6 items-start">
         {/* Left — upload form & feature image with bounding boxes */}
-        <div className="upload-pane">
-          <div className="upload-card">
-            <div className="upload-card-title">Upload &amp; Detection View</div>
+        <div className="sticky top-6 z-10">
+          <div className="bg-surface border border-border rounded-2xl p-5 sm:p-6 shadow-md">
+            <div className="font-display text-sm font-bold text-text-primary mb-4 pb-2 border-b border-border/50">Upload &amp; Detection View</div>
             <UploadForm
               onUpload={handleUpload}
               loading={loading}
@@ -120,7 +114,7 @@ export default function UploadPage() {
               updatingModel={updatingModel}
             />
             {error && (
-              <p className="error" style={{ marginTop: "0.85rem" }}>
+              <p className="text-xs text-rose-500 font-medium mt-3">
                 {error}
               </p>
             )}
@@ -129,14 +123,14 @@ export default function UploadPage() {
 
         {/* Right — result statistics & charts */}
         <div>
-          <div className="upload-card">
-            <div className="upload-card-title">Detection Result &amp; Analytics</div>
+          <div className="bg-surface border border-border rounded-2xl p-5 sm:p-6 shadow-md">
+            <div className="font-display text-sm font-bold text-text-primary mb-4 pb-2 border-b border-border/50">Detection Result &amp; Analytics</div>
             {result ? (
               <ResultPanel result={result} />
             ) : (
-              <div className="result-placeholder" style={{ boxShadow: 'none', background: 'transparent', padding: '3rem 1rem' }}>
+              <div className="flex flex-col items-center justify-center p-12 text-center text-text-muted gap-3">
                 <ImageOff size={44} strokeWidth={1.4} />
-                <p>Your analysis breakdown and charts will appear here after you upload and analyze a photo.</p>
+                <p className="text-xs sm:text-sm">Your analysis breakdown and charts will appear here after you upload and analyze a photo.</p>
               </div>
             )}
           </div>

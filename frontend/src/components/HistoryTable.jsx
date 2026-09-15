@@ -1,13 +1,12 @@
 import { useState, useMemo, useEffect, useContext } from "react";
-import { Download, Eye, Trash2, Loader2, X, User } from "lucide-react";
-import ResultPanel from "./ResultPanel.jsx";
+import { Download, Eye, Trash2, Loader2, User } from "lucide-react";
+import AnalysisLightbox from "./AnalysisLightbox.jsx";
 import { SettingsContext } from "../context/SettingsContext.jsx";
-import { toResultShape, formatWasteType } from "../utils/wasteUtils.js";
+import { formatWasteType, getDetectionSummary, SEVERITY_RANKS } from "../utils/wasteUtils.js";
+import { downloadCsv } from "../utils/downloadUtils.js";
 
 /**
  * HistoryTable — sortable + paginated table of analyses.
- * Filter is now managed by the parent (HistoryPage) and applied before
- * passing data in, so this component only handles sort + pagination.
  */
 export default function HistoryTable({ history, showUser = false, onDeleteRequest, deletingId, onViewRequest }) {
   const settingsCtx = useContext(SettingsContext);
@@ -26,10 +25,30 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
   const sorted = useMemo(() => {
     const mul = sortDir === "asc" ? 1 : -1;
     return [...(history || [])].sort((a, b) => {
-      if (sortField === "date")
+      if (sortField === "date") {
         return mul * (new Date(a.created_at) - new Date(b.created_at));
-      if (sortField === "score")
+      }
+      if (sortField === "location") {
+        return mul * (a.location_label || "").localeCompare(b.location_label || "");
+      }
+      if (sortField === "wasteType") {
+        const typeA = getDetectionSummary(a.detections, a.boxes).topWasteType || "";
+        const typeB = getDetectionSummary(b.detections, b.boxes).topWasteType || "";
+        return mul * typeA.localeCompare(typeB);
+      }
+      if (sortField === "confidence") {
+        const confA = getDetectionSummary(a.detections, a.boxes).confidence || 0;
+        const confB = getDetectionSummary(b.detections, b.boxes).confidence || 0;
+        return mul * (confA - confB);
+      }
+      if (sortField === "score") {
         return mul * ((a.pollution_score || 0) - (b.pollution_score || 0));
+      }
+      if (sortField === "severity") {
+        const rankA = SEVERITY_RANKS[a.severity] ?? 0;
+        const rankB = SEVERITY_RANKS[b.severity] ?? 0;
+        return mul * (rankA - rankB);
+      }
       return 0;
     });
   }, [history, sortField, sortDir]);
@@ -45,27 +64,23 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
   }
 
   const sortIcon = (field) =>
-    sortField !== field ? " ↕" : sortDir === "asc" ? " ↑" : " ↓";
+    sortField === field ? (sortDir === "asc" ? " ↑" : " ↓") : "";
 
   const handleExportCSV = () => {
-    // Convert sorted records to CSV download
     const headers = ["ID", "Date", "Location", "Top Waste Type", "Score", "Severity"];
-    const rows = sorted.map(r => [
-      r.id,
-      new Date(r.created_at).toISOString(),
-      `"${r.location_label || ''}"`,
-      r.topType || r.waste_type || 'Unknown',
-      r.pollution_score || 0,
-      r.severity || 'Low'
-    ]);
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `littora_analyses_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const rows = sorted.map((r) => {
+      const summary = getDetectionSummary(r.detections, r.boxes);
+      const topWaste = summary.topWasteType ? formatWasteType(summary.topWasteType) : "Unknown";
+      return [
+        r.id,
+        new Date(r.created_at).toISOString(),
+        `"${r.location_label || ''}"`,
+        `"${topWaste}"`,
+        r.pollution_score || 0,
+        r.severity || 'Low'
+      ];
+    });
+    downloadCsv(headers, rows, `littora_analyses_${Date.now()}.csv`);
   };
 
   const handleDeleteClick = (id) => {
@@ -74,149 +89,200 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
 
   if (!history || history.length === 0) {
     return (
-      <div className="history">
-        <div className="history-header">
-          <p className="section-title" style={{ margin: 0 }}>Analysis Records</p>
-        </div>
-        <p className="empty-state">No analyses match the selected filter.</p>
+      <div className="bg-surface border border-border rounded-2xl shadow-md overflow-hidden p-8 text-center text-sm text-text-muted">
+        No analyses match the selected filter.
       </div>
     );
   }
 
   return (
-    <div className="history">
-      <div className="history-header">
-        <p className="section-title" style={{ margin: 0 }}>Analysis Records</p>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <span className="page-info">{sorted.length} entries</span>
-          <button className="export-btn" onClick={handleExportCSV}>
-            <Download size={14} />
+    <div className="bg-surface border border-border rounded-2xl shadow-md overflow-hidden">
+      <div className="flex items-center justify-between p-4 sm:p-5 border-b border-border/60 flex-wrap gap-3">
+        <div>
+          <span className="font-display text-base font-bold text-text-primary mr-2">Analysis Records</span>
+          <span className="text-xs text-text-muted font-medium">
+            {sorted.length} {sorted.length === 1 ? "entry" : "entries"}
+          </span>
+        </div>
+        <div>
+          <button
+            type="button"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-light text-primary hover:bg-primary hover:text-white rounded-pill text-xs font-semibold transition-colors cursor-pointer"
+            onClick={handleExportCSV}
+            title="Export filtered records to CSV"
+          >
+            <Download size={13} />
             Export CSV
           </button>
         </div>
       </div>
 
-      <table>
-        <thead>
-          <tr>
-            <th>Photo</th>
-            <th
-              id="sort-date"
-              className="sortable"
-              onClick={() => toggleSort("date")}
-            >
-              Date{sortIcon("date")}
-            </th>
-            <th>Location</th>
-            <th>Top Waste Type</th>
-            <th>Confidence</th>
-            <th
-              id="sort-score"
-              className="sortable"
-              onClick={() => toggleSort("score")}
-            >
-              Score{sortIcon("score")}
-            </th>
-            <th>Severity</th>
-            {showUser && <th>User</th>}
-            <th className="th-actions">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {paged.map((row) => (
-            <tr key={row.id}>
-              <td>
-                {row.image_url ? (
-                  <img
-                    src={row.image_url}
-                    alt="Beach analysis thumbnail"
-                    className="thumb"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="thumb-placeholder" title="No image">—</div>
-                )}
-              </td>
-              <td>
-                {formatDate(row.created_at)}
-              </td>
-              <td>
-                <span className="location-text">
-                  {row.location_label || "Unknown location"}
-                </span>
-              </td>
-              <td>
-                <span className={`waste-badge waste-${(row.topType || row.waste_type || 'unknown').toLowerCase()}`}>
-                  {formatWasteType(row.topType || row.waste_type)}
-                </span>
-              </td>
-              <td>
-                <span className="confidence-high">90.4%</span>
-              </td>
-              <td>{row.pollution_score}</td>
-              <td>
-                <span className={`severity-badge severity-${row.severity?.toLowerCase()}`}>
-                  {row.severity}
-                </span>
-              </td>
-              {showUser && (
-                <td>
-                  <span
-                    className="admin-card-user"
-                    title={row.user_name ? `${row.user_name} (${row.user_email || ""})` : (row.user_email || row.user_id || "Anonymous")}
-                    style={{ fontSize: "0.78rem", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "4px" }}
-                  >
-                    <User size={12} />
-                    {row.user_name || row.user_email || (row.user_id ? row.user_id.slice(0, 8) + "…" : "Anon")}
-                  </span>
-                </td>
-              )}
-              <td className="td-actions">
-                <div className="action-buttons-cell">
-                  <button
-                    className="action-btn action-view"
-                    title="View analysis detail"
-                    aria-label="View analysis detail"
-                    onClick={() => onViewRequest ? onViewRequest(row) : setSelectedRow(row)}
-                  >
-                    <Eye size={16} />
-                  </button>
-                  {onDeleteRequest && (
-                    <button
-                      className="action-btn action-delete"
-                      title="Delete analysis"
-                      aria-label="Delete analysis"
-                      disabled={deletingId === row.id}
-                      onClick={() => handleDeleteClick(row.id)}
-                    >
-                      {deletingId === row.id
-                        ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} />
-                        : <Trash2 size={15} />}
-                    </button>
-                  )}
-                </div>
-              </td>
+      <div className="w-full overflow-x-auto">
+        <table className="w-full text-left border-collapse text-xs sm:text-sm">
+          <thead className="bg-bg-secondary/50 text-text-secondary border-b border-border text-[11px] uppercase tracking-wider font-semibold">
+            <tr>
+              <th className="px-4 py-3 font-semibold">Photo</th>
+              <th
+                className="px-4 py-3 font-semibold cursor-pointer select-none hover:text-text-primary transition-colors"
+                onClick={() => toggleSort("date")}
+                title="Click to sort by date"
+              >
+                Date{sortIcon("date")}
+              </th>
+              <th
+                className="px-4 py-3 font-semibold cursor-pointer select-none hover:text-text-primary transition-colors"
+                onClick={() => toggleSort("location")}
+                title="Click to sort by location"
+              >
+                Location{sortIcon("location")}
+              </th>
+              <th
+                className="px-4 py-3 font-semibold cursor-pointer select-none hover:text-text-primary transition-colors"
+                onClick={() => toggleSort("wasteType")}
+                title="Click to sort by top waste type"
+              >
+                Top Waste Type{sortIcon("wasteType")}
+              </th>
+              <th
+                className="px-4 py-3 font-semibold cursor-pointer select-none hover:text-text-primary transition-colors"
+                onClick={() => toggleSort("confidence")}
+                title="Click to sort by AI detection confidence"
+              >
+                Confidence{sortIcon("confidence")}
+              </th>
+              <th
+                className="px-4 py-3 font-semibold cursor-pointer select-none hover:text-text-primary transition-colors"
+                onClick={() => toggleSort("score")}
+                title="Click to sort by severity score"
+              >
+                Score{sortIcon("score")}
+              </th>
+              <th
+                className="px-4 py-3 font-semibold cursor-pointer select-none hover:text-text-primary transition-colors"
+                onClick={() => toggleSort("severity")}
+                title="Click to sort by severity tier"
+              >
+                Severity{sortIcon("severity")}
+              </th>
+              {showUser && <th className="px-4 py-3 font-semibold">User</th>}
+              <th className="px-4 py-3 font-semibold">Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-border/40">
+            {paged.map((row) => {
+              const summary = getDetectionSummary(row.detections, row.boxes);
+              const topWasteLabel = summary.topWasteType ? formatWasteType(summary.topWasteType) : "None";
+              const confLabel = summary.confidence != null ? `${Math.round(summary.confidence * 100)}%` : "—";
+
+              return (
+                <tr key={row.id} className="hover:bg-bg-secondary/30 transition-colors">
+                  <td className="px-4 py-3 text-text-primary align-middle">
+                    {row.image_url ? (
+                      <img
+                        src={row.image_url}
+                        alt="Beach analysis thumbnail"
+                        className="w-12 h-12 rounded-xl object-cover border border-border/60 hover:opacity-80 transition-opacity cursor-pointer shrink-0"
+                        loading="lazy"
+                        onClick={() => (onViewRequest ? onViewRequest(row) : setSelectedRow(row))}
+                        title="Click to view detection"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-bg-secondary flex items-center justify-center text-text-muted text-xs border border-border/60" title="No image">
+                        —
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-text-primary align-middle">
+                    <span className="text-xs text-text-muted font-mono">{formatDate(row.created_at)}</span>
+                  </td>
+                  <td className="px-4 py-3 text-text-primary align-middle">
+                    <span className="font-medium text-text-primary max-w-[180px] truncate block" title={row.location_label || ""}>
+                      {row.location_label || "Unknown location"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-text-primary align-middle">
+                    {summary.topWasteType ? (
+                      <span className={`waste-badge waste-${summary.topWasteType.toLowerCase()} px-2 py-0.5 rounded-pill text-xs font-semibold`}>
+                        {topWasteLabel}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-text-muted italic">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-text-primary align-middle">
+                    {summary.confidence != null ? (
+                      <span className={summary.confidence >= 0.8 ? "text-emerald-500 font-semibold" : "text-amber-500 font-semibold"}>
+                        {confLabel}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-text-muted italic">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-text-primary align-middle font-medium">{row.pollution_score ?? 0}</td>
+                  <td className="px-4 py-3 text-text-primary align-middle">
+                    <span className={`severity-badge severity-${(row.severity || "low").toLowerCase()} px-2.5 py-0.5 rounded-pill text-xs font-bold`}>
+                      {row.severity || "Low"}
+                    </span>
+                  </td>
+                  {showUser && (
+                    <td className="px-4 py-3 text-text-primary align-middle">
+                      <span
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-pill bg-bg-secondary/70 text-text-secondary text-xs border border-border/50 max-w-[140px] truncate"
+                        title={row.user_name ? `${row.user_name} (${row.user_email || ""})` : (row.user_email || row.user_id || "Anonymous")}
+                      >
+                        <User size={12} />
+                        {row.user_name || row.user_email || (row.user_id ? row.user_id.slice(0, 8) + "…" : "Anon")}
+                      </span>
+                    </td>
+                  )}
+                  <td className="px-4 py-3 text-text-primary align-middle">
+                    <div className="flex items-center gap-1">
+                      <button
+                        className="p-1.5 rounded-lg text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                        title="View Detection"
+                        aria-label="View Detection"
+                        onClick={() => onViewRequest ? onViewRequest(row) : setSelectedRow(row)}
+                      >
+                        <Eye size={16} />
+                      </button>
+                      {onDeleteRequest && (
+                        <button
+                          className="p-1.5 rounded-lg text-text-muted hover:text-rose-500 hover:bg-rose-500/10 transition-colors disabled:opacity-40 cursor-pointer"
+                          title="Delete Analysis"
+                          aria-label="Delete Analysis"
+                          disabled={deletingId === row.id}
+                          onClick={() => handleDeleteClick(row.id)}
+                        >
+                          {deletingId === row.id
+                            ? <Loader2 size={15} className="animate-spin" />
+                            : <Trash2 size={15} />}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
       {totalPages > 1 && (
-        <div className="pagination">
+        <div className="flex items-center justify-between px-4 py-3 border-t border-border/60 bg-bg-secondary/20">
           <button
             type="button"
-            className="pagination-btn"
+            className="px-3 py-1.5 rounded-pill text-xs font-semibold bg-surface border border-border text-text-primary hover:bg-bg-secondary disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
             onClick={() => setPage((p) => Math.max(0, p - 1))}
             disabled={safePage === 0}
           >
             ← Prev
           </button>
-          <span className="page-info">
+          <span className="text-xs text-text-muted font-medium">
             {safePage + 1} / {totalPages}
           </span>
           <button
             type="button"
-            className="pagination-btn"
+            className="px-3 py-1.5 rounded-pill text-xs font-semibold bg-surface border border-border text-text-primary hover:bg-bg-secondary disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
             onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
             disabled={safePage >= totalPages - 1}
           >
@@ -225,50 +291,12 @@ export default function HistoryTable({ history, showUser = false, onDeleteReques
         </div>
       )}
 
-      {/* ── Detail Modal Preview ── */}
-      {selectedRow && (
-        <div
-          className="modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Photo analysis detail"
-          onClick={() => setSelectedRow(null)}
-        >
-          <div
-            className="modal-content"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              className="modal-close"
-              onClick={() => setSelectedRow(null)}
-              aria-label="Close"
-            >
-              <X size={16} />
-            </button>
-
-            {selectedRow.image_url && (
-              <img
-                src={selectedRow.image_url}
-                alt="Full-size beach analysis"
-                className="modal-img"
-                decoding="async"
-              />
-            )}
-
-            <div className="modal-body">
-              {showUser && (selectedRow.user_name || selectedRow.user_email || selectedRow.user_id) && (
-                <div className="admin-card-user" style={{ marginBottom: "0.5rem", fontSize: "0.85rem" }}>
-                  <User size={14} style={{ display: "inline", marginRight: "4px" }} />
-                  Uploaded by: <strong title={selectedRow.user_email || selectedRow.user_id}>
-                    {selectedRow.user_name || selectedRow.user_email || (selectedRow.user_id?.slice(0, 12) + "…")}
-                  </strong>
-                </div>
-              )}
-              <ResultPanel result={toResultShape(selectedRow)} />
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── Detail Modal Preview using universal AnalysisLightbox ── */}
+      <AnalysisLightbox
+        item={selectedRow}
+        showUser={showUser}
+        onClose={() => setSelectedRow(null)}
+      />
     </div>
   );
 }

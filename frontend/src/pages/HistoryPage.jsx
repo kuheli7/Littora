@@ -1,29 +1,60 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import {
-  Search, ImageOff, Shield, AlertTriangle, Trash2, X, CheckCircle,
-  RefreshCw, ImageIcon, TrendingUp, BarChart3, Users
-} from "lucide-react";
+import { ImageOff, RefreshCw, ChevronDown } from "lucide-react";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext.jsx";
+import SectionHeader from "../components/ui/SectionHeader.jsx";
+import MetricCard from "../components/ui/MetricCard.jsx";
+import FilterToolbar from "../components/ui/FilterToolbar.jsx";
 import PhotoGallery from "../components/PhotoGallery.jsx";
 import HistoryTable from "../components/HistoryTable.jsx";
+import ConfirmModal from "../components/ConfirmModal.jsx";
+import ToastNotification from "../components/ToastNotification.jsx";
+import { API_BASE, formatWasteType, normalizeSeverity, SUPPORTED_WASTE_TYPES } from "../utils/wasteUtils.js";
 
-const API_BASE   = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
-const SEVERITIES = ["All", "Low", "Moderate", "High", "Severe"];
+const SEVERITY_OPTIONS = [
+  { id: "All",      label: "All",      sub: "" },
+  { id: "Low",      label: "Low",      sub: "0–10" },
+  { id: "Moderate", label: "Moderate", sub: "11–30" },
+  { id: "High",     label: "High",     sub: "31–60" },
+  { id: "Severe",   label: "Severe",   sub: ">60" },
+];
+
+const DATE_OPTIONS = [
+  { id: "all", label: "All Time" },
+  { id: "7d",  label: "Last 7 Days" },
+  { id: "30d", label: "Last 30 Days" },
+  { id: "90d", label: "Last 90 Days" },
+];
 
 export default function HistoryPage() {
   const { user, getToken, isAdmin } = useAuth();
 
-  const [history,     setHistory]     = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [error,       setError]       = useState(null);
-  const [filter,      setFilter]      = useState("All");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [history,          setHistory]          = useState([]);
+  const [loading,          setLoading]          = useState(true);
+  const [error,            setError]            = useState(null);
+
+  // Filter states
+  const [filterSeverity,   setFilterSeverity]   = useState("All");
+  const [filterWasteType,  setFilterWasteType]  = useState("all");
+  const [filterDate,       setFilterDate]       = useState("all");
+  const [filterLocation,   setFilterLocation]   = useState("all");
+  const [searchQuery,      setSearchQuery]      = useState("");
 
   // Delete state
   const [confirm,  setConfirm]  = useState(null); // analysis id awaiting confirmation
   const [deleting, setDeleting] = useState(null); // id currently being deleted
   const [toast,    setToast]    = useState(null);  // { type, message }
+
+  // Photo gallery column layout state (2, 3, or 4 columns)
+  const [galleryColCount, setGalleryColCount] = useState(() => {
+    const saved = parseInt(localStorage.getItem("photoGalleryColCount"), 10);
+    return [2, 3, 4].includes(saved) ? saved : 3;
+  });
+
+  const handleGalleryColChange = (n) => {
+    setGalleryColCount(n);
+    localStorage.setItem("photoGalleryColCount", n);
+  };
 
   const showToast = (type, message) => {
     setToast({ type, message });
@@ -62,7 +93,6 @@ export default function HistoryPage() {
     setDeleting(id);
     try {
       const token = await getToken();
-      // Admin uses the admin delete endpoint; users use their own
       const endpoint = isAdmin
         ? `${API_BASE}/api/admin/analyses/${id}`
         : `${API_BASE}/api/my-analyses/${id}`;
@@ -78,13 +108,22 @@ export default function HistoryPage() {
     }
   };
 
-  // Computed admin summary stats
+  // Distinct locations present in history dataset
+  const uniqueLocations = useMemo(() => {
+    const set = new Set();
+    history.forEach((h) => {
+      if (h.location_label) set.add(h.location_label);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [history]);
+
+  // Computed KPI stats
   const totalWaste = useMemo(
     () => history.reduce((s, a) => s + (a.total_waste || 0), 0),
     [history]
   );
   const uniqueUsers = useMemo(
-    () => new Set(history.map((a) => a.user_id).filter(Boolean)).size,
+    () => new Set(history.map((a) => a.user_id || a.user_email).filter(Boolean)).size,
     [history]
   );
   const avgScore = useMemo(
@@ -98,124 +137,197 @@ export default function HistoryPage() {
     [history]
   );
 
-  // Robust case-insensitive filter
+  const avgScoreStatus =
+    avgScore > 60
+      ? "Severe"
+      : avgScore >= 31
+      ? "High"
+      : avgScore >= 11
+      ? "Moderate"
+      : "Low";
+
+  // Multi-criteria filtering logic
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    return history.filter((r) => {
-      const itemSeverity = (r.severity || "").toString().trim().toLowerCase();
-      const matchesSeverity =
-        filter === "All" || itemSeverity === filter.toLowerCase();
-      const wasteTypesStr = (r.detections || []).map(d => d.waste_type).join(" ").toLowerCase();
-      const dateStr = r.created_at ? new Date(r.created_at).toLocaleDateString().toLowerCase() : "";
-      const matchesSearch =
-        !query ||
-        (r.location_label && r.location_label.toLowerCase().includes(query)) ||
-        (r.severity && r.severity.toLowerCase().includes(query)) ||
-        wasteTypesStr.includes(query) ||
-        dateStr.includes(query) ||
-        (isAdmin && r.user_email && r.user_email.toLowerCase().includes(query)) ||
-        (isAdmin && r.user_id && r.user_id.toLowerCase().includes(query));
-      return matchesSeverity && matchesSearch;
-    });
-  }, [history, filter, searchQuery, isAdmin]);
+    const now = Date.now();
 
-  const countLabel = isAdmin
-    ? filter === "All" && !searchQuery.trim()
-      ? `${filtered.length} total analyses (all users)`
-      : `${filtered.length} matching analyses`
-    : filter === "All" && !searchQuery.trim()
-      ? `${filtered.length} of your analyses`
-      : `${filtered.length} matching analyses`;
+    return history.filter((r) => {
+      // 1. Severity Filter
+      const itemSeverity = normalizeSeverity(r.severity);
+      if (filterSeverity !== "All" && itemSeverity !== filterSeverity) {
+        return false;
+      }
+
+      // 2. Waste Type Filter
+      if (filterWasteType !== "all") {
+        const targetType = filterWasteType.toLowerCase();
+        let hasType = false;
+        if (r.detections && typeof r.detections === "object") {
+          if (Array.isArray(r.detections)) {
+            hasType = r.detections.some((d) => {
+              const k = String(d?.waste_type || d?.type || d?.class_name || "").toLowerCase();
+              return k === targetType;
+            });
+          } else {
+            hasType = Boolean(r.detections[targetType]);
+          }
+        }
+        if (!hasType && Array.isArray(r.boxes)) {
+          hasType = r.boxes.some((b) => String(b?.class_name || "").toLowerCase() === targetType);
+        }
+        if (!hasType) return false;
+      }
+
+      // 3. Location Filter
+      if (filterLocation !== "all" && (r.location_label || "") !== filterLocation) {
+        return false;
+      }
+
+      // 4. Date Range Filter
+      if (filterDate !== "all" && r.created_at) {
+        const itemTime = new Date(r.created_at).getTime();
+        const diffMs = now - itemTime;
+        if ((filterDate === "7d" || filterDate === "7days") && diffMs > 7 * 24 * 3600 * 1000) return false;
+        if ((filterDate === "30d" || filterDate === "30days") && diffMs > 30 * 24 * 3600 * 1000) return false;
+        if ((filterDate === "90d" || filterDate === "90days") && diffMs > 90 * 24 * 3600 * 1000) return false;
+      }
+
+      // 5. Global Text Search
+      if (query) {
+        const detectionKeys = Array.isArray(r.detections)
+          ? r.detections.map((d) => (typeof d === "object" ? d?.waste_type || d?.type || "" : String(d)))
+          : typeof r.detections === "object" && r.detections !== null
+          ? Object.keys(r.detections)
+          : [];
+        const wasteTypesStr = detectionKeys.join(" ").toLowerCase();
+        const dateStr = r.created_at ? new Date(r.created_at).toLocaleDateString().toLowerCase() : "";
+
+        const matchesSearch =
+          (r.location_label && r.location_label.toLowerCase().includes(query)) ||
+          (r.severity && r.severity.toLowerCase().includes(query)) ||
+          wasteTypesStr.includes(query) ||
+          dateStr.includes(query) ||
+          (r.user_name && r.user_name.toLowerCase().includes(query)) ||
+          (r.user_email && r.user_email.toLowerCase().includes(query)) ||
+          (r.user_id && String(r.user_id).toLowerCase().includes(query));
+
+        if (!matchesSearch) return false;
+      }
+
+      return true;
+    });
+  }, [history, filterSeverity, filterWasteType, filterLocation, filterDate, searchQuery]);
+
+  // Active filter chips
+  const activeChips = useMemo(() => {
+    const chips = [];
+    if (filterSeverity !== "All") {
+      chips.push({ id: "severity", key: "severity", label: `Severity: ${filterSeverity}`, onRemove: () => setFilterSeverity("All") });
+    }
+    if (filterWasteType !== "all") {
+      chips.push({ id: "wasteType", key: "wasteType", label: `Waste: ${formatWasteType(filterWasteType)}`, onRemove: () => setFilterWasteType("all") });
+    }
+    if (filterLocation !== "all") {
+      chips.push({ id: "location", key: "location", label: `Location: ${filterLocation}`, onRemove: () => setFilterLocation("all") });
+    }
+    if (filterDate !== "all") {
+      const dateOption = DATE_OPTIONS.find((d) => d.id === filterDate);
+      chips.push({ id: "date", key: "date", label: `Date: ${dateOption?.label || filterDate}`, onRemove: () => setFilterDate("all") });
+    }
+    if (searchQuery.trim() !== "") {
+      chips.push({ id: "search", key: "search", label: `Search: "${searchQuery}"`, onRemove: () => setSearchQuery("") });
+    }
+    return chips;
+  }, [filterSeverity, filterWasteType, filterLocation, filterDate, searchQuery]);
+
+  const clearAllFilters = () => {
+    setFilterSeverity("All");
+    setFilterWasteType("all");
+    setFilterLocation("all");
+    setFilterDate("all");
+    setSearchQuery("");
+  };
+
+  const activeFilterCount = (filterSeverity !== "All" ? 1 : 0) +
+    (filterWasteType !== "all" ? 1 : 0) +
+    (filterDate !== "all" ? 1 : 0) +
+    (filterLocation !== "all" ? 1 : 0);
 
   return (
-    <div className="page-container">
-      <div className="page-heading">
-        {isAdmin ? (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-                <Shield size={22} style={{ color: "var(--teal)" }} />
-                <h1 style={{ margin: 0 }}>All Users&apos; History &amp; Management</h1>
-              </div>
-              <p style={{ marginTop: "0.2rem" }}>Admin view — system-wide uploads, statistics, and record management.</p>
-            </div>
-            <button
-              className="admin-refresh-btn"
-              onClick={loadAnalyses}
-              disabled={loading}
-              title="Refresh analyses"
-            >
-              <RefreshCw size={15} style={{ animation: loading ? "spin 1s linear infinite" : "none" }} />
-              Refresh
-            </button>
-          </div>
-        ) : (
-          <>
-            <h1>My History</h1>
-            <p>Browse the photos <strong>you</strong> have uploaded and analyzed.</p>
-          </>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-text-primary tracking-tight">Detection History</h1>
+          <p className="text-xs sm:text-sm text-text-muted mt-1">
+            {isAdmin
+              ? "Administrator view — review, filter, and inspect beach waste analyses submitted by all contributors."
+              : "Search, filter, and review all previous beach waste analyses and detection images."}
+          </p>
+        </div>
+        {user && (
+          <button
+            type="button"
+            className="flex items-center gap-2 px-3.5 py-2 bg-surface hover:bg-bg-secondary border border-border text-text-primary rounded-pill text-xs font-semibold shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+            onClick={loadAnalyses}
+            disabled={loading}
+            title="Refresh analyses"
+          >
+            <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+            Refresh
+          </button>
         )}
       </div>
 
-      {/* Admin Summary Stats Bar */}
-      {isAdmin && !loading && !error && history.length > 0 && (
-        <div className="admin-stats-bar" style={{ marginBottom: "1.5rem" }}>
-          <div className="admin-stat-card">
-            <div className="admin-stat-icon"><ImageIcon size={20} /></div>
-            <div>
-              <div className="admin-stat-val">{history.length}</div>
-              <div className="admin-stat-lbl">Total Analyses</div>
-            </div>
-          </div>
-          <div className="admin-stat-card">
-            <div className="admin-stat-icon"><TrendingUp size={20} /></div>
-            <div>
-              <div className="admin-stat-val">{totalWaste.toLocaleString()}</div>
-              <div className="admin-stat-lbl">Total Waste Items</div>
-            </div>
-          </div>
-          <div className="admin-stat-card">
-            <div className="admin-stat-icon"><BarChart3 size={20} /></div>
-            <div>
-              <div className="admin-stat-val">{avgScore}</div>
-              <div className="admin-stat-lbl">Avg Pollution Score</div>
-            </div>
-          </div>
-          <div className="admin-stat-card">
-            <div className="admin-stat-icon"><Users size={20} /></div>
-            <div>
-              <div className="admin-stat-val">{uniqueUsers}</div>
-              <div className="admin-stat-lbl">Unique Contributors</div>
-            </div>
-          </div>
+      {/* KPI Section */}
+      {!loading && !error && history.length > 0 && (
+        <div className={`grid grid-cols-1 sm:grid-cols-2 ${isAdmin ? "lg:grid-cols-4" : "lg:grid-cols-3"} gap-4`}>
+          <MetricCard
+            label="Detection Sessions"
+            value={history.length}
+          />
+          <MetricCard
+            label="Waste Items"
+            value={totalWaste.toLocaleString()}
+          />
+          <MetricCard
+            label="Avg. Severity Score"
+            value={avgScore}
+            tier={avgScoreStatus}
+          />
+          {isAdmin && (
+            <MetricCard
+              label="Unique Contributors"
+              value={uniqueUsers}
+            />
+          )}
         </div>
       )}
 
       {/* Loading state */}
       {loading && (
-        <div className="result-placeholder">
-          <div className="login-spinner" style={{ margin: "0 auto" }} />
-          <p>{isAdmin ? "Loading all analyses…" : "Loading your analyses…"}</p>
+        <div className="flex flex-col items-center justify-center p-12 text-center text-text-muted gap-3 bg-surface border border-dashed border-border rounded-2xl my-6">
+          <div className="w-7 h-7 border-3 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+          <p className="text-xs sm:text-sm font-medium">{isAdmin ? "Loading all analyses…" : "Loading your analyses…"}</p>
         </div>
       )}
 
       {/* Error state */}
       {!loading && error && (
-        <div className="admin-error-banner" style={{ marginBottom: "1.5rem" }}>
+        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-sm font-medium my-4">
           {error}
         </div>
       )}
 
       {/* Empty state */}
       {!loading && !error && history.length === 0 && (
-        <div className="result-placeholder" style={{ marginTop: "3rem" }}>
+        <div className="flex flex-col items-center justify-center p-12 text-center text-text-muted gap-3 bg-surface border border-dashed border-border rounded-2xl my-6">
           <ImageOff size={48} strokeWidth={1.2} />
           {isAdmin ? (
-            <p>No analyses have been uploaded by any user yet.</p>
+            <p className="text-xs sm:text-sm">No analyses have been uploaded by any user yet.</p>
           ) : (
             <>
-              <p>You haven&apos;t uploaded any photos yet.</p>
-              <p style={{ fontSize: "0.85rem", color: "var(--muted)" }}>
+              <p className="text-xs sm:text-sm">You haven&apos;t uploaded any photos yet.</p>
+              <p className="text-xs text-text-muted mt-1">
                 Head to <strong>Detect Waste</strong> to upload your first beach photo.
               </p>
             </>
@@ -223,102 +335,173 @@ export default function HistoryPage() {
         </div>
       )}
 
-      {/* Filters + content */}
+      {/* Main Content & Simplified Toolbar */}
       {user && !loading && !error && history.length > 0 && (
         <>
-          <div className="history-controls">
-            <p className="section-title" style={{ margin: 0 }}>
-              {countLabel}
-            </p>
-            <div className="history-filters-wrap">
-              <div className="search-box">
-                <Search size={16} className="search-icon" />
-                <input
-                  type="text"
-                  aria-label="Search"
-                  className="search-input"
-                  placeholder={isAdmin ? "Search location, severity, or email…" : "Search location or severity…"}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <div className="filter-bar">
-                {SEVERITIES.map((s) => (
+          <FilterToolbar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder="Search location, waste type, contributor..."
+            activeFilterCount={activeFilterCount}
+            activeChips={activeChips}
+            onClearAll={clearAllFilters}
+            resultsCount={filtered.length}
+          >
+            {/* Severity Filter Group */}
+            <div className="flex flex-col gap-1.5 flex-1 min-w-[180px]">
+              <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">Severity Tier</label>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {SEVERITY_OPTIONS.map((opt) => (
                   <button
-                    key={s}
+                    key={opt.id}
                     type="button"
-                    className={`filter-pill${filter === s ? " active" : ""}`}
-                    onClick={() => setFilter(s)}
+                    className={`px-3 py-1.5 rounded-pill text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1 ${
+                      filterSeverity === opt.id
+                        ? "border-primary bg-primary text-white font-bold shadow-sm"
+                        : "border-border bg-surface text-text-secondary hover:border-primary/50"
+                    }`}
+                    onClick={() => setFilterSeverity(opt.id)}
                   >
-                    {s}
+                    <span>{opt.label}</span>
+                    {opt.sub && <span className="ml-1 text-[10px] opacity-75 font-normal">{opt.sub}</span>}
                   </button>
                 ))}
               </div>
             </div>
-          </div>
+
+            {/* Waste Type Filter Group */}
+            <div className="flex flex-col gap-1.5 flex-1 min-w-[180px]">
+              <label className="text-xs font-semibold text-text-muted uppercase tracking-wider" htmlFor="filter-waste-select">Waste Type</label>
+              <div className="relative">
+                <select
+                  id="filter-waste-select"
+                  className="w-full pl-3.5 pr-9 py-2 text-xs sm:text-sm bg-bg-secondary text-text-primary border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all cursor-pointer appearance-none"
+                  aria-label="Filter by waste type"
+                  value={filterWasteType}
+                  onChange={(e) => setFilterWasteType(e.target.value)}
+                >
+                  <option value="all">All Waste Types</option>
+                  {SUPPORTED_WASTE_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {formatWasteType(type)}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Date Filter Group */}
+            <div className="flex flex-col gap-1.5 flex-1 min-w-[180px]">
+              <label className="text-xs font-semibold text-text-muted uppercase tracking-wider" htmlFor="filter-date-select">Date Range</label>
+              <div className="relative">
+                <select
+                  id="filter-date-select"
+                  className="w-full pl-3.5 pr-9 py-2 text-xs sm:text-sm bg-bg-secondary text-text-primary border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all cursor-pointer appearance-none"
+                  aria-label="Filter by date range"
+                  value={filterDate}
+                  onChange={(e) => setFilterDate(e.target.value)}
+                >
+                  {DATE_OPTIONS.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Location Filter Group */}
+            <div className="flex flex-col gap-1.5 flex-1 min-w-[180px]">
+              <label className="text-xs font-semibold text-text-muted uppercase tracking-wider" htmlFor="filter-loc-select">Beach Location</label>
+              <div className="relative">
+                <select
+                  id="filter-loc-select"
+                  className="w-full pl-3.5 pr-9 py-2 text-xs sm:text-sm bg-bg-secondary text-text-primary border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all cursor-pointer appearance-none"
+                  aria-label="Filter by location"
+                  value={filterLocation}
+                  onChange={(e) => setFilterLocation(e.target.value)}
+                >
+                  <option value="all">All Locations</option>
+                  {uniqueLocations.map((loc) => (
+                    <option key={loc} value={loc}>
+                      {loc}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+              </div>
+            </div>
+          </FilterToolbar>
 
           {/* Photo gallery */}
-          <section style={{ marginBottom: "0.5rem" }}>
-            <p className="section-title">Photo Gallery</p>
+          <section className="space-y-4">
+            <SectionHeader
+              title="Photo Gallery"
+              subtitle="Visual detection catalog and photo inspection"
+              action={
+                filtered.length > 0 ? (
+                  <div className="flex items-center gap-1.5 pt-0.5">
+                    <span className="text-xs text-text-muted mr-1 hidden sm:inline">Columns:</span>
+                    {[2, 3, 4].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => handleGalleryColChange(n)}
+                        className={`px-2.5 sm:px-3 py-1 rounded-pill text-xs font-semibold transition-all cursor-pointer border ${
+                          galleryColCount === n
+                            ? "bg-primary text-white border-primary shadow-sm"
+                            : "bg-surface text-text-muted border-border hover:text-text-primary"
+                        }`}
+                        aria-label={`Show ${n} columns`}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                ) : null
+              }
+            />
             <PhotoGallery
               items={filtered}
               showUser={isAdmin}
-              deletingId={deleting}
               onDeleteRequest={(id) => setConfirm(id)}
+              deletingId={deleting}
+              colCount={galleryColCount}
+              onColChange={handleGalleryColChange}
             />
           </section>
 
           {/* Detailed records table */}
-          <section>
-            <p className="section-title">Detailed Records</p>
+          <section className="space-y-4">
+            <SectionHeader
+              title="Analysis Records"
+              subtitle="Tabular dataset of past scans and debris classifications"
+            />
             <HistoryTable
               history={filtered}
               showUser={isAdmin}
-              deletingId={deleting}
               onDeleteRequest={(id) => setConfirm(id)}
+              deletingId={deleting}
             />
           </section>
         </>
       )}
 
-      {/* ── Confirmation Modal ── */}
-      {confirm && (
-        <div className="admin-modal-backdrop" onClick={() => setConfirm(null)}>
-          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="admin-modal-icon">
-              <AlertTriangle size={32} style={{ color: "#dc2626" }} />
-            </div>
-            <h2 className="admin-modal-title">Delete this analysis?</h2>
-            <p className="admin-modal-body">
-              This will permanently remove the image and all associated data.
-              This action <strong>cannot be undone</strong>.
-            </p>
-            <div className="admin-modal-actions">
-              <button className="admin-modal-cancel" onClick={() => setConfirm(null)}>
-                <X size={15} /> Cancel
-              </button>
-              <button
-                id="history-confirm-delete-btn"
-                className="admin-modal-delete"
-                onClick={handleDeleteConfirm}
-              >
-                <Trash2 size={15} /> Yes, delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Confirm delete modal using shared ConfirmModal */}
+      <ConfirmModal
+        isOpen={confirm !== null}
+        title="Delete this analysis?"
+        message="This will permanently delete this analysis and all associated records. This action cannot be undone."
+        confirmLabel="Yes, delete"
+        confirmVariant="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setConfirm(null)}
+      />
 
-      {/* ── Toast ── */}
-      {toast && (
-        <div className={`admin-toast admin-toast-${toast.type}`}>
-          {toast.type === "success"
-            ? <CheckCircle size={16} />
-            : <AlertTriangle size={16} />
-          }
-          <span>{toast.message}</span>
-        </div>
-      )}
+      {/* Toast notification using shared ToastNotification */}
+      <ToastNotification toast={toast} />
     </div>
   );
 }

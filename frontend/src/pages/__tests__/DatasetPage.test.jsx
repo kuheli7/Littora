@@ -51,12 +51,24 @@ describe("DatasetPage component", () => {
     vi.clearAllMocks();
   });
 
-  it("renders Dataset Explorer title, table, and dataset search controls", async () => {
+  it("renders Data Explorer title, table, and dataset search controls", async () => {
     renderDataset();
     await vi.waitFor(() => {
-      expect(screen.getByRole("heading", { name: /dataset explorer/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /data explorer/i })).toBeInTheDocument();
     });
     expect(screen.getByRole("table")).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/search datasets/i)).toBeInTheDocument();
+  });
+
+  it("renders View action button for Roboflow dataset and Export buttons for downloadable datasets", async () => {
+    renderDataset();
+    await vi.waitFor(() => {
+      const viewLink = screen.getByRole("link", { name: /view/i });
+      expect(viewLink).toBeInTheDocument();
+      expect(viewLink).toHaveAttribute("href", expect.stringContaining("roboflow.com"));
+      expect(viewLink).toHaveAttribute("target", "_blank");
+    });
+    const exportButtons = screen.getAllByRole("button", { name: /export/i });
+    expect(exportButtons.length).toBeGreaterThanOrEqual(2);
   });
 });

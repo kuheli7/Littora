@@ -22,12 +22,35 @@ export const supabase = createClient(supabaseUrl, supabaseSecretKey, {
 });
 
 const BUCKET = process.env.SUPABASE_STORAGE_BUCKET || "beach-waste-images";
+const SUPPORTED_WASTE_TYPES = new Set(["bottle", "can", "bag", "wrapper"]);
+
+/**
+ * Sanitizes an image filename by stripping directory traversal sequences,
+ * path separators, and non-safe characters.
+ */
+export function sanitizeFilename(originalName) {
+  if (!originalName || typeof originalName !== "string") {
+    return "image.jpg";
+  }
+  // Strip directory paths (forward and backward slashes)
+  const baseName = originalName.split(/[/\\]/).pop() || "";
+  // Strip null bytes and control chars
+  const noControl = baseName.replace(/[\x00-\x1f\x7f-\x9f]/g, "");
+  // Replace path traversal patterns (e.g., '..'), and unsafe characters (keep alphanumeric, ., -, _)
+  const sanitized = noControl
+    .replace(/\.\.+/g, ".")
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .replace(/^[_.-]+/, "");
+
+  return sanitized || "image.jpg";
+}
 
 /**
  * Uploads an image buffer to Supabase Storage and returns its public URL.
  */
 export async function uploadImage(buffer, originalName, mimeType) {
-  const fileName = `${Date.now()}-${originalName}`;
+  const safeName = sanitizeFilename(originalName);
+  const fileName = `${Date.now()}-${safeName}`;
 
   const { error } = await supabase.storage
     .from(BUCKET)
@@ -55,12 +78,20 @@ export async function saveAnalysis({
   pollutionScore,
   severity,
   detections,
+  boxes,
   latitude,
   longitude,
   locationLabel,
   userId,
   modelUsed,
 }) {
+  const unsupportedWasteTypes = Object.keys(detections || {}).filter(
+    (wasteType) => !SUPPORTED_WASTE_TYPES.has(String(wasteType).toLowerCase())
+  );
+  if (unsupportedWasteTypes.length > 0) {
+    throw new Error(`Unsupported waste type(s): ${unsupportedWasteTypes.join(", ")}`);
+  }
+
   const activeModelId = modelUsed || (await getActiveSystemModel());
 
   // 1. Resolve location_id — upsert into locations if coordinates are provided
@@ -83,34 +114,52 @@ export async function saveAnalysis({
   }
 
   // 2. Insert analysis row — only location_id, no raw coordinate columns (5NF)
+  const insertPayload = {
+    image_url:       imageUrl,
+    total_waste:     totalWaste,
+    pollution_score: pollutionScore,
+    severity,
+    user_id:         userId      ?? null,
+    model_used:      activeModelId || null,
+    location_id:     locationId,
+  };
+  if (boxes && Array.isArray(boxes)) {
+    insertPayload.boxes = boxes;
+  }
+
   const { data: analysis, error: analysisError } = await supabase
     .from("analyses")
-    .insert({
-      image_url:       imageUrl,
-      total_waste:     totalWaste,
-      pollution_score: pollutionScore,
-      severity,
-      user_id:         userId      ?? null,
-      model_used:      activeModelId || null,
-      location_id:     locationId,
-    })
+    .insert(insertPayload)
     .select()
     .single();
 
   if (analysisError) throw analysisError;
 
-  // 3. Insert child detections rows
-  const detectionRows = Object.entries(detections).map(([wasteType, count]) => ({
+  // 3. Insert child detections rows with compensation rollback
+  const detectionRows = Object.entries(detections || {}).map(([wasteType, count]) => ({
     analysis_id: analysis.id,
-    waste_type:  wasteType,
+    waste_type:  String(wasteType).toLowerCase(),
     count,
   }));
 
   if (detectionRows.length > 0) {
-    const { error: detectionsError } = await supabase
-      .from("detections")
-      .insert(detectionRows);
-    if (detectionsError) throw detectionsError;
+    try {
+      const { error: detectionsError } = await supabase
+        .from("detections")
+        .insert(detectionRows);
+
+      if (detectionsError) {
+        throw detectionsError;
+      }
+    } catch (err) {
+      // Rollback created parent record so no orphaned analyses remain
+      try {
+        await supabase.from("analyses").delete().eq("id", analysis.id);
+      } catch (cleanupErr) {
+        console.error(`Failed to rollback orphaned analysis ${analysis.id}:`, cleanupErr.message);
+      }
+      throw err;
+    }
   }
 
   // 4. Return enriched row from vw_analysis_details (includes location JOIN)
@@ -286,19 +335,113 @@ export async function deleteAnalysis(id) {
 }
 
 /**
+ * Permanently deletes a user's account and all associated data:
+ * 1. Queries all analyses belonging to the user.
+ * 2. Deletes child detections for those analyses.
+ * 3. Deletes the analyses rows.
+ * 4. Removes user image uploads from Supabase Storage.
+ * 5. Deletes the user from Supabase Auth via supabase.auth.admin.deleteUser(userId).
+ */
+export async function deleteUserAccountAndData(userId) {
+  if (!userId) {
+    throw new Error("User ID is required for account deletion");
+  }
+
+  // 1. Fetch user's analyses to clean up images and detections
+  const { data: userAnalyses, error: fetchError } = await supabase
+    .from("analyses")
+    .select("id, image_url")
+    .eq("user_id", userId);
+
+  if (fetchError) {
+    console.error(`[account-delete] Error fetching analyses for user ${userId}:`, fetchError);
+  }
+
+  if (userAnalyses && userAnalyses.length > 0) {
+    const analysisIds = userAnalyses.map((a) => a.id);
+
+    // 2. Delete child detections rows
+    const { error: detectionsErr } = await supabase
+      .from("detections")
+      .delete()
+      .in("analysis_id", analysisIds);
+
+    if (detectionsErr) {
+      console.warn("[account-delete] Detections deletion warning:", detectionsErr.message);
+    }
+
+    // 3. Delete analyses rows
+    const { error: analysesErr } = await supabase
+      .from("analyses")
+      .delete()
+      .eq("user_id", userId);
+
+    if (analysesErr) {
+      console.warn("[account-delete] Analyses deletion warning:", analysesErr.message);
+    }
+
+    // 4. Remove image files from Supabase Storage (best-effort)
+    const fileNames = userAnalyses
+      .map((a) => a.image_url?.split("/").pop())
+      .filter(Boolean);
+
+    if (fileNames.length > 0) {
+      try {
+        await supabase.storage.from(BUCKET).remove(fileNames);
+      } catch (storageErr) {
+        console.warn("[account-delete] Storage cleanup warning:", storageErr.message);
+      }
+    }
+  }
+
+  // 5. Delete the user from auth.users via Supabase Admin API
+  const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+  if (authError) {
+    throw authError;
+  }
+
+  return { success: true };
+}
+
+/**
  * Returns past analyses, most recent first, for the history view.
  * Queries consolidated view public.vw_analysis_details.
  */
-export async function listAnalyses({ limit = 50, offset = 0 } = {}) {
-  const { data, error } = await supabase
+export async function listAnalyses({ limit = 50, offset = 0, userId } = {}) {
+  let query = supabase
     .from("vw_analysis_details")
-    .select("*")
+    .select("*");
+
+  if (userId) {
+    query = query.eq("user_id", userId);
+  }
+
+  const { data, error } = await query
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (error) throw error;
   return data ? data.map(formatAnalysisRow) : [];
 }
+
+function formatSev(s) {
+  if (!s) return "Low";
+  const str = String(s).toLowerCase();
+  if (str === "severe") return "Severe";
+  if (str === "high") return "High";
+  if (str === "moderate") return "Moderate";
+  return "Low";
+}
+
+function parseLocationLabel(label = "") {
+  const parts = label.split(",").map((p) => p.trim()).filter(Boolean);
+  const beach = parts[0] || "Coastal Site";
+  const city = parts.length >= 2 ? parts[1] : "";
+  const country = parts.length > 2 ? parts[2] : parts.length === 2 ? parts[1] : "Coastal Region";
+  return { beach, city, country };
+}
+
+const SEV_RANK = { low: 0, moderate: 1, high: 2, severe: 3 };
 
 /**
  * Returns aggregated statistics for the dashboard:
@@ -338,15 +481,6 @@ export async function getStats(userId = null) {
       )
     : 0;
 
-  const formatSev = (s) => {
-    if (!s) return "Low";
-    const str = String(s).toLowerCase();
-    if (str === "severe") return "Severe";
-    if (str === "high") return "High";
-    if (str === "moderate") return "Moderate";
-    return "Low";
-  };
-
   const severityCounts = { Low: 0, Moderate: 0, High: 0, Severe: 0 };
   const aggregateDetections = {};
 
@@ -368,46 +502,165 @@ export async function getStats(userId = null) {
     }
   }
 
-  const locations = data
-    .filter((r) => r.latitude != null && r.longitude != null)
-    .map((r) => {
-      const detMap = {};
-      if (r.detections_map && typeof r.detections_map === "object") {
-        Object.entries(r.detections_map).forEach(([type, count]) => {
-          detMap[type.toLowerCase()] = Number(count || 1);
-        });
-      } else if (Array.isArray(r.detections)) {
-        r.detections.forEach((d) => {
-          if (d && d.waste_type) {
-            const type = d.waste_type.toLowerCase();
-            detMap[type] = (detMap[type] || 0) + Number(d.count || 1);
-          }
-        });
-      }
+  // Group all analyses by their location_id (or lat,lng) so multiple detections per beach are combined
+  const locationGroupMap = new Map();
 
-      const labelParts = (r.location_label || "").split(",");
-      const beachName  = labelParts[0]?.trim() || "Coastal Site";
-      const cityName   = labelParts[1]?.trim() || "";
+  for (const r of data) {
+    if (r.latitude == null || r.longitude == null) continue;
+    const key = r.location_id || `${Number(r.latitude).toFixed(4)},${Number(r.longitude).toFixed(4)}`;
+    const { beach, city, country } = parseLocationLabel(r.location_label);
+    const rowSev = formatSev(r.severity);
+    const rowScore = Number(r.pollution_score || 0);
+    const rowWaste = Number(r.total_waste || 0);
 
-      return {
-        id:              r.id,
+    if (!locationGroupMap.has(key)) {
+      locationGroupMap.set(key, {
+        id:              r.location_id || r.id,
+        location_id:     r.location_id,
         latitude:        r.latitude,
         longitude:       r.longitude,
         location_label:  r.location_label,
         locationLabel:   r.location_label,
-        beach:           beachName,
-        city:            cityName,
-        country:         "India",
-        pollution_score: Number(r.pollution_score || 0),
-        pollutionScore:  Number(r.pollution_score || 0),
-        severity:        formatSev(r.severity),
+        beach,
+        city,
+        country,
+        pollution_scores: [],
+        total_waste:     0,
+        // worst_severity: all-time highest severity → drives map pin colour
+        worst_severity:  rowSev,
+        // peak_scan: the single scan with the highest pollution_score.
+        // This is what the map pin colour represents, so popup & lightbox
+        // must show this scan's image, boxes, score and severity.
+        peak_scan: {
+          created_at:      r.created_at,
+          image_url:       r.image_url,
+          boxes:           r.boxes || [],
+          severity:        rowSev,
+          pollution_score: rowScore,
+          total_waste:     rowWaste,
+          detections:      {},
+        },
+        detections:      {},
+        scan_count:      0,
+        scans:           [],
+      });
+    }
+
+    const group = locationGroupMap.get(key);
+    group.total_waste += rowWaste;
+    group.pollution_scores.push(rowScore);
+    group.scan_count += 1;
+
+    // Accumulate aggregate detections (kept for any future analytics usage)
+    if (r.detections_map && typeof r.detections_map === "object") {
+      Object.entries(r.detections_map).forEach(([type, count]) => {
+        const k = type.toLowerCase();
+        group.detections[k] = (group.detections[k] || 0) + Number(count || 1);
+      });
+    } else if (Array.isArray(r.detections)) {
+      r.detections.forEach((d) => {
+        if (d && d.waste_type) {
+          const k = d.waste_type.toLowerCase();
+          group.detections[k] = (group.detections[k] || 0) + Number(d.count || 1);
+        }
+      });
+    }
+
+    // Update worst_severity for map pin colour
+    const currentWorstRank = SEV_RANK[group.worst_severity.toLowerCase()] ?? 0;
+    const newRank = SEV_RANK[rowSev.toLowerCase()] ?? 0;
+    if (newRank > currentWorstRank) {
+      group.worst_severity = rowSev;
+    }
+
+    // Update peak_scan if this row has a higher pollution score.
+    // Tie-break: prefer the more recent scan so we don't show a stale image
+    // when two scans have identical scores.
+    const isPeakByScore  = rowScore > group.peak_scan.pollution_score;
+    const isTiebreakNewer = rowScore === group.peak_scan.pollution_score &&
+      new Date(r.created_at) > new Date(group.peak_scan.created_at);
+
+    if (isPeakByScore || isTiebreakNewer) {
+      // Build this scan's own detections map (not aggregated)
+      const scanDetections = {};
+      if (r.detections_map && typeof r.detections_map === "object") {
+        Object.entries(r.detections_map).forEach(([type, count]) => {
+          scanDetections[type.toLowerCase()] = Number(count || 1);
+        });
+      } else if (Array.isArray(r.detections)) {
+        r.detections.forEach((d) => {
+          if (d && d.waste_type) {
+            scanDetections[d.waste_type.toLowerCase()] = Number(d.count || 1);
+          }
+        });
+      }
+      group.peak_scan = {
         created_at:      r.created_at,
-        total_waste:     Number(r.total_waste || 0),
-        totalWaste:      Number(r.total_waste || 0),
         image_url:       r.image_url,
-        detections:      detMap,
+        boxes:           r.boxes || [],
+        severity:        rowSev,
+        pollution_score: rowScore,
+        total_waste:     rowWaste,
+        detections:      scanDetections,
       };
+    }
+
+    group.scans.push({
+      id: r.id,
+      created_at: r.created_at,
+      severity: rowSev,
+      pollution_score: rowScore,
+      total_waste: rowWaste,
+      image_url: r.image_url,
+      boxes: r.boxes || [],
     });
+  }
+
+  const locations = Array.from(locationGroupMap.values()).map((g) => {
+    const avgScore = g.pollution_scores.length
+      ? Math.round(g.pollution_scores.reduce((sum, s) => sum + s, 0) / g.pollution_scores.length)
+      : 0;
+    const ps = g.peak_scan;  // the single scan that earned the map pin colour
+    return {
+      id:              g.id,
+      location_id:     g.location_id,
+      latitude:        g.latitude,
+      longitude:       g.longitude,
+      location_label:  g.location_label,
+      locationLabel:   g.location_label,
+      beach:           g.beach,
+      city:            g.city,
+      country:         g.country,
+      // avg score across all scans shown in the popup stats bar
+      pollution_score: avgScore,
+      pollutionScore:  avgScore,
+      // worst severity drives the map pin colour
+      severity:        g.worst_severity,
+      // cumulative totals
+      total_waste:     g.total_waste,
+      totalWaste:      g.total_waste,
+      // aggregate detections
+      detections:      g.detections,
+      scan_count:      g.scan_count,
+      scans:           g.scans,
+      // peak_scan: the scan with the highest pollution_score.
+      // The popup thumbnail, badge, items, score AND the lightbox all
+      // use this so everything is internally consistent.
+      peak_scan: {
+        created_at:      ps.created_at,
+        image_url:       ps.image_url,
+        boxes:           ps.boxes,
+        severity:        ps.severity,
+        pollution_score: ps.pollution_score,
+        total_waste:     ps.total_waste,
+        detections:      ps.detections,
+      },
+      // top-level image/boxes/created_at come from peak_scan for the Popup thumbnail
+      image_url:       ps.image_url,
+      boxes:           ps.boxes,
+      created_at:      ps.created_at,
+    };
+  });
 
   // Reverse to newest-first for the history table
   const history = data.map(formatAnalysisRow).reverse();
@@ -418,27 +671,9 @@ export async function getStats(userId = null) {
     getLocationsCatalog(),
   ]);
 
-  // If user has no scan locations yet, populate map locations from locationsCatalog so map and cleanup page render beach hotspots
-  const displayLocations = locations.length > 0 ? locations : locationsCatalog.map((loc) => {
-    const labelParts = (loc.location_label || "").split(",");
-    return {
-      id:              loc.id,
-      latitude:        loc.latitude,
-      longitude:       loc.longitude,
-      location_label:  loc.location_label,
-      locationLabel:   loc.location_label,
-      beach:           labelParts[0]?.trim() || "Coastal Site",
-      city:            labelParts[1]?.trim() || "",
-      country:         "India",
-      pollution_score: 15,
-      pollutionScore:  15,
-      severity:        "Low",
-      created_at:      loc.created_at,
-      total_waste:     0,
-      totalWaste:      0,
-      detections:      {},
-    };
-  });
+  // Only include real, scan-backed locations — no synthetic placeholders.
+  // A user with no GPS-tagged scans correctly sees an empty map.
+  const displayLocations = locations;
 
   return {
     totalAnalyses,
@@ -461,6 +696,7 @@ export async function getWasteTypesCatalog() {
     const { data, error } = await supabase
       .from("waste_types")
       .select("id, name, category, is_recyclable, color_hex")
+      .eq("is_active", true)
       .order("category", { ascending: true });
 
     if (error || !data) return [];
@@ -509,18 +745,6 @@ export async function getAvailableAiModels() {
  */
 export async function getActiveSystemModel() {
   try {
-    const { data, error } = await supabase
-      .from("system_settings")
-      .select("value")
-      .eq("key", "active_ai_model")
-      .single();
-
-    if (!error && data?.value) {
-      return data.value;
-    }
-  } catch (_) {}
-
-  try {
     const { data: activeModel, error: modelError } = await supabase
       .from("ai_models")
       .select("id")
@@ -533,7 +757,19 @@ export async function getActiveSystemModel() {
     }
   } catch (_) {}
 
-  return null;
+  try {
+    const { data, error } = await supabase
+      .from("system_settings")
+      .select("value")
+      .eq("key", "active_ai_model")
+      .single();
+
+    if (!error && data?.value) {
+      return data.value;
+    }
+  } catch (_) {}
+
+  return "yolov11m";
 }
 
 /**
@@ -546,16 +782,29 @@ export async function setActiveSystemModel(modelId) {
     throw new Error(`Invalid model ID: ${modelId}`);
   }
 
-  const { error: settingsError } = await supabase
-    .from("system_settings")
-    .upsert({ key: "active_ai_model", value: modelId, updated_at: new Date().toISOString() }, { onConflict: "key" });
+  // 1. Synchronize active state directly in ai_models using valid WHERE filters
+  const { error: deactivateError } = await supabase
+    .from("ai_models")
+    .update({ is_active: false })
+    .neq("id", modelId);
 
-  if (settingsError) throw settingsError;
+  if (deactivateError) throw deactivateError;
 
-  // Sync active status in public.ai_models table
-  await supabase.from("ai_models").update({ is_active: false }).neq("id", "");
-  await supabase.from("ai_models").update({ is_active: true }).eq("id", modelId);
+  const { error: activateError } = await supabase
+    .from("ai_models")
+    .update({ is_active: true })
+    .eq("id", modelId);
+
+  if (activateError) throw activateError;
+
+  // 2. Best-effort update to system_settings configuration table
+  try {
+    await supabase
+      .from("system_settings")
+      .upsert({ key: "active_ai_model", value: modelId, updated_at: new Date().toISOString() }, { onConflict: "key" });
+  } catch (_) {
+    // Non-fatal: ai_models.is_active is synchronized and acts as source of truth
+  }
 
   return modelId;
 }
-

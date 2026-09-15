@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { User, LogOut, LogIn, Settings, Clock, Shield, ChevronDown, ChevronRight, BarChart3 } from "lucide-react";
+import { LogOut, LogIn, Settings, Clock, Shield, ChevronDown, ChevronRight, TrendingUp, User } from "lucide-react";
 import { useAuth } from "../context/AuthContext.jsx";
+import ConfirmModal from "./ConfirmModal.jsx";
+import Badge from "./ui/Badge.jsx";
 
 export default function FloatingAccountMenu() {
   const { user, logout, isAdmin } = useAuth();
@@ -36,7 +38,7 @@ export default function FloatingAccountMenu() {
   };
 
   const rawFullName = user?.user_metadata?.full_name?.trim() || user?.user_metadata?.name?.trim();
-  const isAdminUser = isAdmin || user?.email?.toLowerCase() === "admin@littora.app";
+  const isAdminUser = Boolean(isAdmin);
 
   const displayName = user
     ? (rawFullName || (isAdminUser ? "Admin" : (user.email ?? "User")))
@@ -47,325 +49,131 @@ export default function FloatingAccountMenu() {
     : "G";
 
   return (
-    <div className="floating-account-menu-container" ref={menuRef} style={{ position: "relative", zIndex: 1000 }}>
+    <div className="relative z-40" ref={menuRef}>
       {/* Floating Trigger Button */}
       <button
         type="button"
-        className="floating-account-btn"
+        className="flex items-center gap-2.5 px-3 py-1.5 bg-surface/90 hover:bg-surface border border-border rounded-pill shadow-md backdrop-blur-md transition-all duration-200 cursor-pointer"
         onClick={() => setIsOpen((prev) => !prev)}
         aria-label="Account Menu"
         aria-expanded={isOpen}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "0.55rem",
-          padding: "0.45rem 0.85rem",
-          borderRadius: "30px",
-          background: "var(--surface-elevated, #ffffff)",
-          border: "1px solid var(--border-strong, #bca88e)",
-          boxShadow: "0 6px 22px rgba(0,0,0,0.18)",
-          cursor: "pointer",
-          transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
-          color: "var(--text-primary, #0f172a)",
-        }}
       >
-        <div style={{
-          width: "30px",
-          height: "30px",
-          borderRadius: "50%",
-          background: user
-            ? "linear-gradient(135deg, var(--teal) 0%, #0B746F 100%)"
-            : "rgba(14, 140, 134, 0.15)",
-          color: user ? "#fff" : "var(--teal)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontWeight: 800,
-          fontSize: "0.85rem",
-          boxShadow: user ? "0 2px 8px rgba(14, 140, 134, 0.4)" : "none",
-        }}>
+        <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${!user ? "bg-sand-gold text-text-primary" : "bg-primary text-white"}`}>
           {user ? initial : <User size={15} />}
         </div>
 
-        <span style={{
-          fontSize: "0.88rem",
-          fontWeight: 800,
-          maxWidth: "135px",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          color: "var(--text-primary, #0f172a)",
-          letterSpacing: "-0.01em"
-        }}>
+        <span className="font-sans text-xs font-semibold text-text-primary max-w-[130px] truncate">
           {displayName}
         </span>
 
         <ChevronDown
           size={14}
-          style={{
-            color: "var(--text-primary, #0f172a)",
-            opacity: 0.85,
-            transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
-            transition: "transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)"
-          }}
+          className={`text-text-muted transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
         />
       </button>
 
-      {/* Redesigned Popover Card with High Contrast */}
+      {/* Popover Card */}
       {isOpen && (
-        <div className="account-dropdown-card" style={{
-          position: "absolute",
-          top: "calc(100% + 10px)",
-          right: 0,
-          width: "275px",
-          background: "var(--surface-elevated, #ffffff)",
-          border: "1px solid var(--border-strong, #bca88e)",
-          borderRadius: "16px",
-          boxShadow: "0 20px 48px -8px rgba(0, 0, 0, 0.32)",
-          padding: "0.95rem",
-          animation: "fadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1)",
-          zIndex: 1001,
-        }}>
+        <div className="absolute right-0 top-full mt-2 w-72 bg-surface border border-border rounded-2xl shadow-xl p-4 z-50">
           {/* Header Profile Section */}
-          <div style={{
-            padding: "0.6rem 0.6rem 0.85rem",
-            borderBottom: "1px solid var(--border-lt)"
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-              <div style={{
-                width: "42px",
-                height: "42px",
-                borderRadius: "50%",
-                background: user
-                  ? "linear-gradient(135deg, var(--teal) 0%, #095E5A 100%)"
-                  : "rgba(14, 140, 134, 0.15)",
-                color: user ? "#fff" : "var(--teal)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontWeight: 800,
-                fontSize: "1.1rem",
-                boxShadow: user ? "0 4px 12px rgba(14, 140, 134, 0.35)" : "none",
-                flexShrink: 0,
-              }}>
+          <div className="pb-3 mb-3 border-b border-border/50">
+            <div className="flex items-center gap-3 mb-2">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${!user ? "bg-sand-gold text-text-primary" : "bg-primary text-white"}`}>
                 {user ? initial : <User size={20} />}
               </div>
 
-              <div style={{ overflow: "hidden", flex: 1 }}>
-                <div style={{
-                  fontWeight: 800,
-                  fontSize: "0.95rem",
-                  color: "var(--text-primary, #0f172a)",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap"
-                }}>
+              <div className="min-w-0 flex-1">
+                <div className="font-display text-sm font-bold text-text-primary truncate">
                   {displayName}
                 </div>
-                <div style={{
-                  fontSize: "0.78rem",
-                  fontWeight: 600,
-                  color: "var(--text-secondary, #475569)",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  marginTop: "2px"
-                }}>
+                <div className="text-xs text-text-muted truncate">
                   {user ? user.email : "Guest Visitor"}
                 </div>
               </div>
             </div>
 
             {/* Role Badge */}
-            <div style={{ marginTop: "0.65rem" }}>
+            <div className="mt-2">
               {user && isAdminUser ? (
-                <span style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.35rem",
-                  padding: "0.28rem 0.7rem",
-                  borderRadius: "20px",
-                  background: "var(--amber-light, #FEF3C7)",
-                  color: "#92400E",
-                  border: "1px solid #F59E0B",
-                  fontSize: "0.73rem",
-                  fontWeight: 800,
-                  letterSpacing: "0.02em"
-                }}>
-                  <Shield size={12} style={{ color: "#B45309" }} /> Administrator
-                </span>
+                <Badge variant="role" type="admin" icon={<Shield size={12} />}>
+                  Administrator
+                </Badge>
               ) : user ? (
-                <span style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.35rem",
-                  padding: "0.28rem 0.7rem",
-                  borderRadius: "20px",
-                  background: "var(--primary-light, #D6F2EF)",
-                  color: "#095E5A",
-                  border: "1px solid #0E8C86",
-                  fontSize: "0.73rem",
-                  fontWeight: 800,
-                  letterSpacing: "0.02em"
-                }}>
-                  <User size={12} style={{ color: "#0E8C86" }} /> Account Member
-                </span>
+                <Badge variant="role" type="member" icon={<User size={12} />}>
+                  Account Member
+                </Badge>
               ) : (
-                <span style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.35rem",
-                  padding: "0.28rem 0.7rem",
-                  borderRadius: "20px",
-                  background: "#F1F5F9",
-                  color: "#475569",
-                  border: "1px solid #CBD5E1",
-                  fontSize: "0.73rem",
-                  fontWeight: 700
-                }}>
-                  <User size={12} /> Preview Guest
-                </span>
+                <Badge variant="role" type="guest" icon={<User size={12} />}>
+                  Preview Guest
+                </Badge>
               )}
             </div>
           </div>
 
-            {/* Quick Action Navigation Links */}
-            <div style={{ padding: "0.5rem 0", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-              <Link
-                to="/settings"
-                onClick={() => setIsOpen(false)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.75rem",
-                  padding: "0.65rem 0.75rem",
-                  borderRadius: "10px",
-                  color: "var(--text-primary, #0f172a)",
-                  fontSize: "0.88rem",
-                  fontWeight: 700,
-                  textDecoration: "none",
-                  transition: "all 0.15s ease",
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = "var(--sand, #F1E8D8)"}
-                onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-              >
-                <Settings size={16} style={{ color: "var(--primary, #0E8C86)", opacity: 0.9 }} />
+          {/* Navigation Links */}
+          <div className="space-y-1 my-2">
+            <Link
+              to="/settings"
+              onClick={() => setIsOpen(false)}
+              className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-bg-secondary transition-colors"
+            >
+              <div className="flex items-center gap-2.5">
+                <Settings size={16} className="text-primary" />
                 <span>Account Settings</span>
-                <ChevronRight size={14} style={{ marginLeft: "auto", color: "var(--text-muted)", opacity: 0.7 }} />
-              </Link>
+              </div>
+              <ChevronRight size={14} className="text-text-muted" />
+            </Link>
 
-              {user && (
-                <>
-                  <Link
-                    to="/history"
-                    onClick={() => setIsOpen(false)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.75rem",
-                      padding: "0.65rem 0.75rem",
-                      borderRadius: "10px",
-                      color: "var(--text-primary, #0f172a)",
-                      fontSize: "0.88rem",
-                      fontWeight: 700,
-                      textDecoration: "none",
-                      transition: "all 0.15s ease",
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = "var(--sand, #F1E8D8)"}
-                    onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-                  >
-                    <Clock size={16} style={{ color: "var(--primary, #0E8C86)", opacity: 0.9 }} />
+            {user && (
+              <>
+                <Link
+                  to="/history"
+                  onClick={() => setIsOpen(false)}
+                  className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-bg-secondary transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Clock size={16} className="text-primary" />
                     <span>Detection History</span>
-                    <ChevronRight size={14} style={{ marginLeft: "auto", color: "var(--text-muted)", opacity: 0.7 }} />
-                  </Link>
+                  </div>
+                  <ChevronRight size={14} className="text-text-muted" />
+                </Link>
 
-                  <Link
-                    to="/analytics"
-                    onClick={() => setIsOpen(false)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.75rem",
-                      padding: "0.65rem 0.75rem",
-                      borderRadius: "10px",
-                      color: "var(--text-primary, #0f172a)",
-                      fontSize: "0.88rem",
-                      fontWeight: 700,
-                      textDecoration: "none",
-                      transition: "all 0.15s ease",
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = "var(--sand, #F1E8D8)"}
-                    onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-                  >
-                    <BarChart3 size={16} style={{ color: "var(--primary, #0E8C86)", opacity: 0.9 }} />
-                    <span>Analytics & Trends</span>
-                    <ChevronRight size={14} style={{ marginLeft: "auto", color: "var(--text-muted)", opacity: 0.7 }} />
-                  </Link>
-                </>
-              )}
-            </div>
+                <Link
+                  to="/trends"
+                  onClick={() => setIsOpen(false)}
+                  className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-bg-secondary transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <TrendingUp size={16} className="text-primary" />
+                    <span>Historical Trends</span>
+                  </div>
+                  <ChevronRight size={14} className="text-text-muted" />
+                </Link>
+              </>
+            )}
+          </div>
 
-          {/* Footer Auth Action */}
-          <div style={{ borderTop: "1px solid var(--border-lt)", paddingTop: "0.65rem" }}>
+          {/* Footer Action */}
+          <div className="pt-3 mt-3 border-t border-border/50">
             {user ? (
               <button
                 type="button"
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
                 onClick={() => {
                   setIsOpen(false);
                   setShowLogoutModal(true);
                 }}
-                style={{
-                  width: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "0.55rem",
-                  padding: "0.65rem 0.8rem",
-                  borderRadius: "10px",
-                  color: "#9F1239",
-                  fontSize: "0.88rem",
-                  fontWeight: 800,
-                  background: "#FEF2F2",
-                  border: "1px solid #FECDD3",
-                  cursor: "pointer",
-                  transition: "all 0.18s ease"
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "#E11D48";
-                  e.currentTarget.style.color = "#ffffff";
-                  e.currentTarget.style.borderColor = "#BE123C";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "#FEF2F2";
-                  e.currentTarget.style.color = "#9F1239";
-                  e.currentTarget.style.borderColor = "#FECDD3";
-                }}
               >
-                <LogOut size={16} /> Sign Out
+                <LogOut size={16} />
+                <span>Sign Out</span>
               </button>
             ) : (
               <button
                 type="button"
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold bg-primary hover:bg-primary-hover text-white rounded-lg shadow-sm transition-colors cursor-pointer"
                 onClick={() => {
                   setIsOpen(false);
                   navigate("/login");
-                }}
-                style={{
-                  width: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "0.55rem",
-                  padding: "0.65rem 0.8rem",
-                  borderRadius: "10px",
-                  color: "#fff",
-                  fontSize: "0.85rem",
-                  fontWeight: 700,
-                  background: "linear-gradient(135deg, var(--teal) 0%, #0B746F 100%)",
-                  border: "none",
-                  cursor: "pointer",
-                  boxShadow: "0 4px 12px rgba(14, 140, 134, 0.3)",
-                  transition: "all 0.18s ease"
                 }}
               >
                 <LogIn size={15} /> Sign In / Register
@@ -376,37 +184,16 @@ export default function FloatingAccountMenu() {
       )}
 
       {/* Logout Confirmation Dialog */}
-      {showLogoutModal && (
-        <div className="admin-modal-backdrop" onClick={() => !loggingOut && setShowLogoutModal(false)}>
-          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="admin-modal-icon">
-              <LogOut size={36} style={{ color: "var(--teal)" }} />
-            </div>
-            <h2 className="admin-modal-title">Confirm Sign Out</h2>
-            <p className="admin-modal-body">
-              Are you sure you want to log out of your Littora account?
-            </p>
-            <div className="admin-modal-actions">
-              <button
-                className="admin-modal-cancel"
-                onClick={() => setShowLogoutModal(false)}
-                disabled={loggingOut}
-              >
-                Cancel
-              </button>
-              <button
-                id="confirm-logout-btn"
-                className="filter-btn-apply"
-                onClick={handleConfirmLogout}
-                disabled={loggingOut}
-                style={{ padding: "0.55rem 1.25rem", display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
-              >
-                {loggingOut ? "Signing out…" : "Sign Out"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        isOpen={showLogoutModal}
+        title="Confirm Sign Out"
+        message="Are you sure you want to log out of your Littora account?"
+        confirmLabel={loggingOut ? "Signing out…" : "Sign Out"}
+        confirmVariant="primary"
+        icon={LogOut}
+        onConfirm={handleConfirmLogout}
+        onCancel={() => !loggingOut && setShowLogoutModal(false)}
+      />
     </div>
   );
 }

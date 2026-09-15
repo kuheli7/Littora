@@ -1,6 +1,5 @@
 # Node
 node_modules/
-package-lock.json
 npm-debug.log*
 yarn-error.log*
 dist/
@@ -12,6 +11,11 @@ __pycache__/
 *.pyc
 venv/
 .venv/
+**/venv
+**/venv/
+**/.venv/
+ai-service/venv/
+ai-service/venv
 *.egg-info/
 
 # Environment files
@@ -32,8 +36,10 @@ dataset/train/
 dataset/valid/
 dataset/test/
 
-# OS / editor
+# OS / editor / local agents
 .DS_Store
 .vscode/
 .idea/
 *.log
+.agents/
+

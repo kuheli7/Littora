@@ -58,22 +58,21 @@ describe("Sidebar component", () => {
 
     // Guest-locked items render as div buttons (not NavLink) for unauthenticated users
     expect(screen.getByRole("button", { name: /historical trends/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /beach map/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /analytics/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /pollution map/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /detection history/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /reports/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /cleanup/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /dataset/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /data explorer/i })).toBeInTheDocument();
   });
 
   it("renders all navigation items as unlocked links when user is authenticated", async () => {
     renderSidebar({ user: { id: "u1", email: "user@test.com" } });
     await vi.waitFor(() => {
-      expect(screen.getByRole("link", { name: /beach map/i })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /pollution map/i })).toBeInTheDocument();
     });
-    expect(screen.getByRole("link", { name: /dataset/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /data explorer/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /historical trends/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /analytics/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /detection history/i })).toBeInTheDocument();
   });
 
   it("does NOT render Admin Dashboard link when user is not admin", async () => {
@@ -105,12 +104,12 @@ describe("Sidebar component", () => {
 
   it("shows backdrop when sidebar is open", () => {
     renderSidebar({ isOpen: true });
-    expect(document.querySelector(".sidebar-backdrop")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-backdrop")).toBeInTheDocument();
   });
 
   it("hides backdrop when sidebar is closed", () => {
     renderSidebar({ isOpen: false });
-    expect(document.querySelector(".sidebar-backdrop")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("sidebar-backdrop")).not.toBeInTheDocument();
   });
 
   it("renders collapsed class when isCollapsed=true and calls onToggleCollapse", async () => {

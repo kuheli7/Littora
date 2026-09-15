@@ -1,25 +1,28 @@
+import { useMemo } from "react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 
 export default function TrendChart({ history }) {
   // history is newest-first from the API — reverse to chronological for the chart
-  const chartData = (history || [])
-    .slice()
-    .reverse()
-    .map((r) => ({
-      date:  new Date(r.created_at).toLocaleDateString("en-IN", {
-        month: "short",
-        day:   "numeric",
-      }),
-      score: r.pollution_score,
-    }));
+  const chartData = useMemo(() => {
+    return (history || [])
+      .slice()
+      .reverse()
+      .map((r) => ({
+        date: new Date(r.created_at).toLocaleDateString("en-IN", {
+          month: "short",
+          day:   "numeric",
+        }),
+        score: r.pollution_score,
+      }));
+  }, [history]);
 
   return (
-    <div className="chart-card">
-      <p className="chart-card-title">Detections Over Time</p>
+    <div className="bg-surface border border-border rounded-xl p-4 sm:p-5 shadow-sm">
+      <p className="font-display text-sm font-bold text-text-primary mb-3">Detections Over Time</p>
       {chartData.length === 0 ? (
-        <div className="chart-empty">
+        <div className="flex items-center justify-center h-55 text-xs text-text-muted font-medium text-center">
           No analyses yet — upload a photo to see the trend.
         </div>
       ) : (
@@ -48,16 +51,7 @@ export default function TrendChart({ history }) {
               axisLine={{ stroke: "var(--border-lt)" }}
               tickLine={false}
             />
-            <Tooltip
-              contentStyle={{
-                background:   "var(--card-bg)",
-                border:       "1px solid var(--border-lt)",
-                borderRadius: 10,
-                boxShadow:    "0 8px 24px rgba(0,0,0,0.12)",
-                fontSize:     12,
-                color:        "var(--ink)",
-              }}
-            />
+            <Tooltip />
             <Area
               type="monotone"
               dataKey="score"

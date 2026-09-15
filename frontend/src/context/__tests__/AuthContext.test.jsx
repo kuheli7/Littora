@@ -7,11 +7,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("../../lib/supabase.js", () => ({
   supabase: {
     auth: {
-      getSession:         vi.fn().mockResolvedValue({ data: { session: null } }),
-      onAuthStateChange:  vi.fn().mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } }),
-      signInWithPassword: vi.fn(),
-      signUp:             vi.fn(),
-      signOut:            vi.fn(),
+      getSession:            vi.fn().mockResolvedValue({ data: { session: null } }),
+      onAuthStateChange:     vi.fn().mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } }),
+      signInWithPassword:    vi.fn(),
+      signUp:                vi.fn(),
+      signOut:               vi.fn(),
+      resetPasswordForEmail: vi.fn(),
+      resend:                vi.fn(),
     },
   },
 }));
@@ -29,6 +31,7 @@ const mockOnAuthStateChange = vi.mocked(supabase.auth.onAuthStateChange);
 const mockSignIn            = vi.mocked(supabase.auth.signInWithPassword);
 const mockSignUp            = vi.mocked(supabase.auth.signUp);
 const mockSignOut           = vi.mocked(supabase.auth.signOut);
+const mockResend            = vi.mocked(supabase.auth.resend);
 
 // Helper component that exposes context values
 function AuthDisplay() {
@@ -179,7 +182,51 @@ describe("AuthContext — signUp", () => {
     expect(mockSignUp).toHaveBeenCalledWith({
       email:    "ok@b.com",
       password: "pass123",
-      options:  { data: { full_name: "Jane" } },
+      options:  {
+        data: { full_name: "Jane" },
+        emailRedirectTo: `${window.location.origin}/login?verified=true`,
+      },
+    });
+  });
+
+  it("calls supabase.auth.resend with signup type and redirect url", async () => {
+    mockResend.mockResolvedValueOnce({ error: null });
+
+    let capturedResend;
+    function ResendCaller() {
+      const { resendVerificationEmail } = useAuth();
+      capturedResend = resendVerificationEmail;
+      return null;
+    }
+
+    render(<SettingsProvider><AuthProvider><ResendCaller /></AuthProvider></SettingsProvider>);
+    await act(async () => {});
+
+    await capturedResend("verify@test.com");
+    expect(mockResend).toHaveBeenCalledWith({
+      type: "signup",
+      email: "verify@test.com",
+      options: {
+        emailRedirectTo: `${window.location.origin}/login?verified=true`,
+      },
+    });
+  });
+
+  it("throws when resendVerificationEmail fails", async () => {
+    mockResend.mockResolvedValueOnce({ error: { message: "Rate limit exceeded" } });
+
+    let capturedResend;
+    function ResendCaller() {
+      const { resendVerificationEmail } = useAuth();
+      capturedResend = resendVerificationEmail;
+      return null;
+    }
+
+    render(<SettingsProvider><AuthProvider><ResendCaller /></AuthProvider></SettingsProvider>);
+    await act(async () => {});
+
+    await expect(capturedResend("verify@test.com")).rejects.toMatchObject({
+      message: "Rate limit exceeded",
     });
   });
 });
@@ -299,3 +346,100 @@ describe("AuthContext — getToken", () => {
     expect(token).toBe("my-jwt");
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe("AuthContext — deleteAccount", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+  });
+
+  it("throws when no active session exists", async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null } });
+    mockOnAuthStateChange.mockReturnValue({
+      data: { subscription: { unsubscribe: vi.fn() } },
+    });
+
+    let capturedDelete;
+    function DeleteCaller() {
+      const { deleteAccount } = useAuth();
+      capturedDelete = deleteAccount;
+      return null;
+    }
+
+    render(<SettingsProvider><AuthProvider><DeleteCaller /></AuthProvider></SettingsProvider>);
+    await act(async () => {});
+
+    await expect(capturedDelete()).rejects.toThrow(/no active session/i);
+  });
+
+  it("successfully calls DELETE /api/auth/account and signs out", async () => {
+    mockGetSession.mockResolvedValue({
+      data: { session: { access_token: "delete-jwt-token", user: { id: "u-del" } } },
+    });
+    mockOnAuthStateChange.mockReturnValue({
+      data: { subscription: { unsubscribe: vi.fn() } },
+    });
+    mockSignOut.mockResolvedValue({});
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ message: "Account deleted" }),
+    });
+    globalThis.fetch = mockFetch;
+
+    sessionStorage.setItem("littora_session_active", "true");
+
+    let capturedDelete;
+    function DeleteCaller() {
+      const { deleteAccount } = useAuth();
+      capturedDelete = deleteAccount;
+      return null;
+    }
+
+    render(<SettingsProvider><AuthProvider><DeleteCaller /></AuthProvider></SettingsProvider>);
+    await act(async () => {});
+
+    await capturedDelete();
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/auth/account"),
+      expect.objectContaining({
+        method: "DELETE",
+        headers: expect.objectContaining({
+          Authorization: "Bearer delete-jwt-token",
+        }),
+      })
+    );
+    expect(sessionStorage.getItem("littora_session_active")).toBeNull();
+    expect(mockSignOut).toHaveBeenCalledOnce();
+  });
+
+  it("throws error when API deletion fails", async () => {
+    mockGetSession.mockResolvedValue({
+      data: { session: { access_token: "token-bad", user: { id: "u-bad" } } },
+    });
+    mockOnAuthStateChange.mockReturnValue({
+      data: { subscription: { unsubscribe: vi.fn() } },
+    });
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      json: () => Promise.resolve({ error: "Server error during account removal" }),
+    });
+    globalThis.fetch = mockFetch;
+
+    let capturedDelete;
+    function DeleteCaller() {
+      const { deleteAccount } = useAuth();
+      capturedDelete = deleteAccount;
+      return null;
+    }
+
+    render(<SettingsProvider><AuthProvider><DeleteCaller /></AuthProvider></SettingsProvider>);
+    await act(async () => {});
+
+    await expect(capturedDelete()).rejects.toThrow("Server error during account removal");
+  });
+});
+

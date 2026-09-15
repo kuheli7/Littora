@@ -56,6 +56,9 @@ describe("DashboardPage component", () => {
     expect(screen.getByText(/Smart Detection/i)).toBeInTheDocument();
     expect(screen.getByText(/Real-time Analysis/i)).toBeInTheDocument();
     expect(screen.getByText(/Data for Impact/i)).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-container")).toHaveStyle({
+      "--dashboard-image": "url(bg.png)",
+    });
   });
 
   it("renders Guest Preview banner when user is not logged in", async () => {
@@ -66,22 +69,23 @@ describe("DashboardPage component", () => {
     expect(screen.getByText(/Platform Overview & Preview Analytics/i)).toBeInTheDocument();
   });
 
-  it("renders personal analytics heading when logged in as regular user", async () => {
+  it("renders live monitoring analytics heading when logged in as authenticated user", async () => {
     renderDashboard({ user: { id: "u1", email: "user@test.com" } });
     await vi.waitFor(() => {
-      expect(screen.getByText("Your Personal Beach Waste Analytics")).toBeInTheDocument();
+      expect(screen.getByText("Live Monitoring & Analytics")).toBeInTheDocument();
     });
     expect(screen.queryByText(/Welcome to Guest Preview Mode/i)).not.toBeInTheDocument();
   });
 
-  it("scrolls smoothly to analytics section when View Dashboard is clicked", async () => {
+  it("scrolls smoothly to analytics section when View Live Analytics is clicked", async () => {
     const scrollIntoViewMock = vi.fn();
     window.HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
 
     renderDashboard();
-    await vi.waitFor(() => screen.getByRole("button", { name: /view dashboard/i }));
+    await vi.waitFor(() => screen.getByRole("button", { name: /view live analytics/i }));
 
-    fireEvent.click(screen.getByRole("button", { name: /view dashboard/i }));
+    fireEvent.click(screen.getByRole("button", { name: /view live analytics/i }));
     expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: "smooth" });
   });
 });
+

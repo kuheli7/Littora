@@ -21,9 +21,10 @@ jest.unstable_mockModule("../services/supabaseClient.js", () => ({
   saveAnalysis:          mockSaveAnalysis,
   listAnalysesByUser:    jest.fn(),
   listAllAnalysesAdmin:  jest.fn(),
-  deleteAnalysisForUser: jest.fn(),
-  deleteAnalysis:        jest.fn(),
-  listAnalyses:          jest.fn(),
+  deleteAnalysisForUser:    jest.fn(),
+  deleteAnalysis:           jest.fn(),
+  deleteUserAccountAndData: jest.fn(),
+  listAnalyses:             jest.fn(),
   getStats:              jest.fn(),
   getAvailableAiModels:  jest.fn().mockResolvedValue([]),
   getActiveSystemModel:  jest.fn().mockResolvedValue("yolov8m"),
@@ -45,6 +46,7 @@ const FAKE_DETECTION = {
   total_waste:    3,
   pollution_score: 45,
   severity:       "Moderate",
+  model_used:     "yolov11m",
 };
 
 const FAKE_ANALYSIS = {
@@ -86,6 +88,9 @@ describe("POST /api/analyze", () => {
       pollution_score: 45,
       severity:        "Moderate",
     });
+    expect(mockSaveAnalysis).toHaveBeenCalledWith(
+      expect.objectContaining({ modelUsed: "yolov11m" })
+    );
   });
 
   it("passes latitude and longitude when provided", async () => {
@@ -158,5 +163,66 @@ describe("POST /api/analyze", () => {
     expect(mockSaveAnalysis).toHaveBeenCalledWith(
       expect.objectContaining({ userId: null })
     );
+  });
+
+  it("returns 413 Payload Too Large when file size exceeds 10MB limit", async () => {
+    const OVERSIZED_BUFFER = Buffer.alloc(10 * 1024 * 1024 + 1024); // 10MB + 1KB
+
+    const res = await request(app)
+      .post("/api/analyze")
+      .attach("image", OVERSIZED_BUFFER, { filename: "large.jpg", contentType: "image/jpeg" });
+
+    expect(res.status).toBe(413);
+    expect(res.body.error).toMatch(/exceeds 10mb limit|file too large/i);
+    expect(mockRunDetection).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 Bad Request when unexpected field name is provided in multipart form", async () => {
+    const res = await request(app)
+      .post("/api/analyze")
+      .attach("wrong_field", TINY_PNG, { filename: "test.jpg", contentType: "image/jpeg" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/unexpected field|invalid/i);
+    expect(mockRunDetection).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 Bad Request when non-image magic bytes are uploaded disguised as JPEG", async () => {
+    const fakeJpg = Buffer.from("Hello world this is definitely plain text not an image!");
+
+    const res = await request(app)
+      .post("/api/analyze")
+      .attach("image", fakeJpg, { filename: "disguised.jpg", contentType: "image/jpeg" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/signature does not match|invalid image file/i);
+    expect(mockRunDetection).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 Bad Request when polyglot file with script payload is detected", async () => {
+    const polyglotJpg = Buffer.concat([
+      Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]),
+      Buffer.from("<script>alert('pwned')</script>"),
+    ]);
+
+    const res = await request(app)
+      .post("/api/analyze")
+      .attach("image", polyglotJpg, { filename: "polyglot.jpg", contentType: "image/jpeg" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/malicious polyglot payload/i);
+    expect(mockRunDetection).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 Bad Request when truncated byte stream (<12 bytes) is uploaded", async () => {
+    const truncated = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+
+    const res = await request(app)
+      .post("/api/analyze")
+      .attach("image", truncated, { filename: "corrupted.jpg", contentType: "image/jpeg" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid or empty image buffer|too small/i);
+    expect(mockRunDetection).not.toHaveBeenCalled();
   });
 });

@@ -1,19 +1,10 @@
-import { useState, useContext } from "react";
-import { UploadCloud, Camera, MapPin, Cpu, Sparkles, Check } from "lucide-react";
+import { useState, useContext, useRef, useEffect } from "react";
+import { UploadCloud, Camera, MapPin, Cpu, Sparkles, Check, Navigation, ChevronDown, LocateFixed, Loader2, RefreshCw } from "lucide-react";
 import { StatsContext } from "../context/StatsContext.jsx";
+import { extractGPS } from "../utils/extractGPS.js";
+import ToastNotification from "./ToastNotification.jsx";
 
-import { DEFAULT_AI_MODELS } from "../utils/wasteUtils.js";
-
-const BBOX_COLORS = {
-  bottle:  "#00D4AA",
-  can:     "#F59E0B",
-  bag:     "#A855F7",
-  wrapper: "#F43F5E",
-  glass:   "#38BDF8",
-  foam:    "#EF4444",
-  metal:   "#818CF8",
-  other:   "#9CA3AF",
-};
+import { DEFAULT_AI_MODELS, BBOX_COLORS } from "../utils/wasteUtils.js";
 
 export default function UploadForm({
   onUpload,
@@ -33,8 +24,26 @@ export default function UploadForm({
   const [previewUrl,    setPreviewUrl]    = useState(null);
   const [dragging,      setDragging]      = useState(false);
   const [selectedBeach, setSelectedBeach] = useState("auto");
+  const [exifCoords,    setExifCoords]    = useState(null);
+  const [deviceCoords,  setDeviceCoords]  = useState(null);
   // idle | fetching | granted | denied
   const [locStatus,     setLocStatus]     = useState("idle");
+  const [toast,         setToast]         = useState(null);
+
+  const previewUrlRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+    };
+  }, []);
+
+  const showToast = (type, message) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   const { activeModel, activeModelDetails, availableModels = DEFAULT_AI_MODELS } = modelInfo || {
     activeModel: "yolov8m",
@@ -42,12 +51,61 @@ export default function UploadForm({
     availableModels: DEFAULT_AI_MODELS,
   };
 
-  function applyFile(selected) {
+  function fetchDeviceGPS() {
+    if (!navigator.geolocation) {
+      setLocStatus("denied");
+      showToast("error", "Geolocation is not supported by your browser.");
+      return;
+    }
+
+    setLocStatus("fetching");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const coords = {
+          latitude: Number(pos.coords.latitude.toFixed(6)),
+          longitude: Number(pos.coords.longitude.toFixed(6)),
+          accuracy: Math.round(pos.coords.accuracy || 0),
+        };
+        setDeviceCoords(coords);
+        setLocStatus("granted");
+        showToast("success", `GPS location locked (${coords.latitude}, ${coords.longitude})`);
+      },
+      (err) => {
+        setLocStatus("denied");
+        const msg = err.code === 1
+          ? "Location access denied. Enable permissions in your browser address bar."
+          : "Unable to retrieve device GPS coordinates. Try again or select a beach below.";
+        showToast("error", msg);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  }
+
+  async function applyFile(selected) {
     if (!selected || !selected.type.startsWith("image/")) return;
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+    }
+    const newPreviewUrl = URL.createObjectURL(selected);
+    previewUrlRef.current = newPreviewUrl;
+
     setFile(selected);
-    setPreviewUrl(URL.createObjectURL(selected));
+    setPreviewUrl(newPreviewUrl);
     setLocStatus("idle");
+    setExifCoords(null);
     if (onReset) onReset();
+
+    // Silently attempt EXIF GPS extraction
+    try {
+      const gps = await extractGPS(selected);
+      if (gps) {
+        setExifCoords(gps);
+        setSelectedBeach("auto");
+        showToast("info", `Extracted GPS from photo EXIF: ${gps.latitude}, ${gps.longitude}`);
+      }
+    } catch (_) {
+      // Non-fatal
+    }
   }
 
   function handleFileChange(e)  { applyFile(e.target.files[0]); }
@@ -63,8 +121,12 @@ export default function UploadForm({
     e.preventDefault();
     if (!file) return;
 
-    if (selectedBeach !== "auto") {
-      const preset = dbLocations.find((l, idx) => (l.id ? String(l.id) === selectedBeach : `loc_${idx}` === selectedBeach));
+    // 1. Manual preset beach selection
+    if (selectedBeach !== "auto" && selectedBeach !== "device" && selectedBeach !== "exif") {
+      const preset = dbLocations.find((l, idx) => {
+        const key = l.id ? String(l.id) : (l.location_id ? String(l.location_id) : `loc_${idx}`);
+        return key === selectedBeach;
+      });
       if (preset) {
         onUpload(file, {
           latitude:      preset.latitude ?? null,
@@ -75,6 +137,37 @@ export default function UploadForm({
       }
     }
 
+    // 2. Specific device GPS selection
+    if (selectedBeach === "device" && deviceCoords) {
+      onUpload(file, {
+        latitude:      deviceCoords.latitude,
+        longitude:     deviceCoords.longitude,
+        locationLabel: "Device GPS Location",
+      });
+      return;
+    }
+
+    // 3. EXIF GPS extracted directly from image
+    if (exifCoords && (selectedBeach === "auto" || selectedBeach === "exif")) {
+      onUpload(file, {
+        latitude:      exifCoords.latitude,
+        longitude:     exifCoords.longitude,
+        locationLabel: "Photo EXIF GPS",
+      });
+      return;
+    }
+
+    // 4. Cached device GPS already granted
+    if (deviceCoords && selectedBeach === "auto") {
+      onUpload(file, {
+        latitude:      deviceCoords.latitude,
+        longitude:     deviceCoords.longitude,
+        locationLabel: "Device GPS Location",
+      });
+      return;
+    }
+
+    // 5. Fallback: prompt device browser geolocation
     if (!navigator.geolocation) {
       onUpload(file, null);
       return;
@@ -83,41 +176,49 @@ export default function UploadForm({
     setLocStatus("fetching");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        const coords = {
+          latitude: Number(pos.coords.latitude.toFixed(6)),
+          longitude: Number(pos.coords.longitude.toFixed(6)),
+          accuracy: Math.round(pos.coords.accuracy || 0),
+        };
+        setDeviceCoords(coords);
         setLocStatus("granted");
-        onUpload(file, { latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        onUpload(file, { latitude: coords.latitude, longitude: coords.longitude, locationLabel: "Device GPS Location" });
       },
       () => {
         setLocStatus("denied");
         onUpload(file, null);
       },
-      { timeout: 6000, maximumAge: 60000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }
 
   const isBusy   = loading || locStatus === "fetching";
   const btnLabel =
-    locStatus === "fetching" ? "Getting location…"
+    locStatus === "fetching" ? "Acquiring GPS location…"
     : loading               ? "Analyzing…"
     :                         "Analyze photo";
 
   const boxes = result?.boxes || [];
 
   return (
-    <form className="upload-form" onSubmit={handleSubmit}>
+    <form className="flex flex-col gap-4 w-full" onSubmit={handleSubmit}>
       <label
         htmlFor="image-input"
-        className={`upload-label${previewUrl ? " has-preview" : ""}${dragging ? " drag-over" : ""}`}
+        className={`relative flex flex-col items-center justify-center min-h-[280px] sm:min-h-[360px] w-full border-2 border-border hover:border-primary/60 rounded-2xl transition-all duration-200 cursor-pointer overflow-hidden ${
+          previewUrl ? "p-0 border-solid bg-black/5 dark:bg-black/20" : "p-6 border-dashed bg-surface"
+        } ${dragging ? "drag-over border-primary bg-primary/5" : ""}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
         {previewUrl ? (
-          <div className="upload-preview-container">
-            <img src={previewUrl} alt="Selected beach photo" className="upload-preview" />
+          <div className="relative w-full flex items-center justify-center">
+            <img src={previewUrl} alt="Selected beach photo" className="w-full h-auto max-h-[680px] rounded-2xl object-contain block" />
 
             {/* Bounding box overlays */}
             {boxes.length > 0 && (
-              <div className="bbox-overlay-layer">
+              <div className="bbox-overlay-layer absolute inset-0">
                 {boxes.map((b, idx) => {
                   const norm = b.box_normalized || [0, 0, 0, 0];
                   const xmin = norm[0] * 100;
@@ -130,7 +231,7 @@ export default function UploadForm({
                   return (
                     <div
                       key={idx}
-                      className="bbox-box"
+                      className="bbox-box absolute border-2 pointer-events-none transition-all"
                       style={{
                         left: `${xmin}%`,
                         top: `${ymin}%`,
@@ -140,7 +241,7 @@ export default function UploadForm({
                         boxShadow: `0 0 10px ${color}80, inset 0 0 8px ${color}25`,
                       }}
                     >
-                      <span className="bbox-label" style={{ backgroundColor: color }}>
+                      <span className="bbox-label absolute bottom-full left-0 px-1.5 py-0.5 text-[10px] font-bold text-white rounded-t leading-none" style={{ backgroundColor: color }}>
                         {label}
                       </span>
                     </div>
@@ -150,14 +251,14 @@ export default function UploadForm({
             )}
           </div>
         ) : (
-          <div className="upload-placeholder">
-            <div className="upload-icon-wrap">
+          <div className="flex flex-col items-center justify-center text-center gap-2">
+            <div className="w-14 h-14 rounded-full bg-primary-light/50 text-primary flex items-center justify-center mb-1">
               <UploadCloud size={24} strokeWidth={1.8} />
             </div>
-            <span className="upload-label-text">
+            <span className="font-display text-sm font-bold text-text-primary">
               Drag &amp; drop or click to browse
             </span>
-            <span className="upload-hint">Supports: JPG, PNG, JPEG (Max 10MB)</span>
+            <span className="text-xs text-text-muted">Supports: JPG, PNG, JPEG (Max 10MB)</span>
           </div>
         )}
       </label>
@@ -170,43 +271,25 @@ export default function UploadForm({
         hidden
       />
 
-      {/* Multi AI Model Selector Section (Admin Only) */}
+      {/* Multi AI Model Selector Section (Admin Only - Collapsible) */}
       {isAdmin && (
-        <div className="model-selector-card" style={{
-          margin: "0.85rem 0",
-          padding: "0.85rem 1rem",
-          borderRadius: "12px",
-          background: "var(--bg-card)",
-          border: "1px solid var(--border)",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.04)"
-        }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.82rem", fontWeight: 700, color: "var(--ink)" }}>
-              <Cpu size={15} style={{ color: "var(--teal)" }} />
+        <details className="bg-surface border border-border rounded-xl p-3.5">
+          <summary className="flex items-center justify-between cursor-pointer font-semibold text-xs text-text-primary">
+            <div className="flex items-center gap-2">
+              <Cpu size={15} className="text-primary" />
               <span>AI Inference Model</span>
-            </label>
-
-            <span style={{
-              fontSize: "0.72rem",
-              fontWeight: 700,
-              padding: "0.2rem 0.55rem",
-              borderRadius: "20px",
-              background: "rgba(14, 140, 134, 0.12)",
-              color: "var(--teal)",
-              border: "1px solid rgba(14, 140, 134, 0.25)",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.3rem"
-            }}>
-              <Sparkles size={11} /> {activeModelDetails?.badge || "Active"}
-            </span>
-          </div>
-
-          <div>
-            <div style={{ fontSize: "0.74rem", color: "var(--muted)", marginBottom: "0.6rem" }}>
-              <strong>System Admin Control:</strong> Select model for system-wide inference across all users.
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "0.5rem" }}>
+
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-pill bg-primary-light text-primary text-[11px] font-bold">
+              <Sparkles size={11} /> {activeModelDetails?.name || activeModelDetails?.badge || "Active"}
+            </span>
+          </summary>
+
+          <div className="pt-3 mt-3 border-t border-border/50 space-y-2">
+            <div className="text-xs text-text-muted">
+              <strong className="text-text-primary">System Admin Control:</strong> Select model for system-wide inference across all users.
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {availableModels.map((m) => {
                 const isSelected = activeModel === m.id;
                 return (
@@ -215,36 +298,15 @@ export default function UploadForm({
                     type="button"
                     disabled={updatingModel}
                     onClick={() => onUpdateModel && onUpdateModel(m.id)}
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "flex-start",
-                      padding: "0.55rem 0.75rem",
-                      borderRadius: "10px",
-                      border: isSelected ? "2px solid var(--teal)" : "2px solid var(--border-lt)",
-                      background: isSelected ? "rgba(14, 140, 134, 0.08)" : "var(--card-bg)",
-                      color: isSelected ? "var(--ink)" : "var(--muted)",
-                      cursor: updatingModel ? "wait" : "pointer",
-                      textAlign: "left",
-                      transition: "all 0.18s ease",
-                      whiteSpace: "nowrap",
-                    }}
+                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      isSelected ? "border-primary bg-primary/10" : "border-border hover:bg-bg-secondary"
+                    }`}
                   >
-                    <div style={{
-                      fontWeight: 700,
-                      fontSize: "0.8rem",
-                      color: isSelected ? "var(--teal)" : "var(--ink)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      width: "100%",
-                      whiteSpace: "nowrap",
-                      gap: "0.3rem"
-                    }}>
+                    <div className="flex items-center justify-between font-bold text-xs text-text-primary">
                       <span>{m.name}</span>
-                      {isSelected && <Check size={13} style={{ color: "var(--teal)", flexShrink: 0 }} />}
+                      {isSelected && <Check size={13} className="text-primary" />}
                     </div>
-                    <div style={{ fontSize: "0.68rem", opacity: 0.8, marginTop: "2px", whiteSpace: "nowrap" }}>
+                    <div className="text-[11px] text-text-muted mt-0.5">
                       {m.tag} • {m.params}
                     </div>
                   </button>
@@ -252,58 +314,118 @@ export default function UploadForm({
               })}
             </div>
           </div>
-        </div>
+        </details>
       )}
 
-      {/* Beach Location Selector */}
-      <div className="beach-selector-container" style={{ margin: "0.85rem 0" }}>
-        <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", fontWeight: 600, color: "var(--muted)", marginBottom: "0.35rem" }}>
-          <MapPin size={14} style={{ color: "var(--teal)" }} /> Target Beach Location:
-        </label>
-        <select
-          value={selectedBeach}
-          onChange={(e) => setSelectedBeach(e.target.value)}
-          className="settings-select"
-          style={{ width: "100%", padding: "0.55rem 0.75rem", borderRadius: "8px" }}
-        >
-          <option value="auto">Device GPS (Auto-detect)</option>
-          {dbLocations.map((item, idx) => {
-            const key = item.id ? String(item.id) : `loc_${idx}`;
-            const label = item.location_label || item.locationLabel || item.beach || (item.latitude != null && item.longitude != null ? `${item.latitude}, ${item.longitude}` : `Location #${idx + 1}`);
-            return (
-              <option key={key} value={key}>
-                {label}
+      {/* Beach Location Selector & GPS Tracker */}
+      <div className="bg-surface border border-border rounded-xl p-3.5 flex flex-col gap-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-text-primary">
+            <MapPin size={14} className="text-primary" /> Target Beach Location:
+          </label>
+          <button
+            type="button"
+            onClick={fetchDeviceGPS}
+            disabled={locStatus === "fetching"}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-pill bg-primary/10 hover:bg-primary/20 text-primary text-[11px] font-semibold border border-primary/20 transition-all cursor-pointer disabled:opacity-50"
+            title="Detect device GPS coordinates"
+          >
+            {locStatus === "fetching" ? (
+              <><Loader2 size={12} className="animate-spin" /> Locating…</>
+            ) : (
+              <><LocateFixed size={12} /> Detect GPS</>
+            )}
+          </button>
+        </div>
+
+        {/* Live GPS / EXIF GPS Active Status Badge */}
+        {exifCoords && (
+          <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-teal-500/10 border border-teal-500/20 text-teal-600 dark:text-teal-400 text-xs font-medium">
+            <div className="flex items-center gap-1.5 truncate">
+              <Navigation size={13} className="shrink-0" />
+              <span className="truncate">Photo EXIF GPS: <strong>{exifCoords.latitude.toFixed(4)}, {exifCoords.longitude.toFixed(4)}</strong></span>
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider bg-teal-500/20 px-1.5 py-0.5 rounded shrink-0">Auto-Attached</span>
+          </div>
+        )}
+
+        {deviceCoords && !exifCoords && (
+          <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary text-xs font-medium">
+            <div className="flex items-center gap-1.5 truncate">
+              <LocateFixed size={13} className="shrink-0" />
+              <span className="truncate">Device GPS: <strong>{deviceCoords.latitude.toFixed(4)}, {deviceCoords.longitude.toFixed(4)}</strong> (±{deviceCoords.accuracy}m)</span>
+            </div>
+            <button
+              type="button"
+              onClick={fetchDeviceGPS}
+              className="p-1 hover:bg-primary/20 rounded-md transition-colors"
+              title="Refresh GPS"
+            >
+              <RefreshCw size={11} className={locStatus === "fetching" ? "animate-spin" : ""} />
+            </button>
+          </div>
+        )}
+
+        <div className="relative">
+          <select
+            value={selectedBeach}
+            onChange={(e) => setSelectedBeach(e.target.value)}
+            className="w-full pl-3.5 pr-9 py-2 bg-bg-secondary text-text-primary border border-border rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all cursor-pointer appearance-none"
+          >
+            <option value="auto">
+              {exifCoords ? "Photo EXIF GPS (Auto-detected)" : deviceCoords ? `Device GPS (${deviceCoords.latitude.toFixed(4)}, ${deviceCoords.longitude.toFixed(4)})` : "Auto-detect (EXIF or Device GPS)"}
+            </option>
+            {deviceCoords && (
+              <option value="device">
+                📍 Live Device GPS ({deviceCoords.latitude.toFixed(4)}, {deviceCoords.longitude.toFixed(4)})
               </option>
-            );
-          })}
-        </select>
+            )}
+            {dbLocations.map((item, idx) => {
+              const key = item.id ? String(item.id) : (item.location_id ? String(item.location_id) : `loc_${idx}`);
+              const label = item.location_label || item.locationLabel || item.beach || (item.latitude != null && item.longitude != null ? `${item.latitude}, ${item.longitude}` : `Location #${idx + 1}`);
+              return (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              );
+            })}
+          </select>
+          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+        </div>
       </div>
 
-      <button type="submit" className="upload-btn" disabled={!file || isBusy}>
+      <button
+        type="submit"
+        className="flex items-center justify-center gap-2 w-full py-3 px-6 bg-primary hover:bg-primary-hover active:bg-primary-active disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm rounded-pill shadow-md transition-all cursor-pointer"
+        disabled={!file || isBusy}
+      >
         <UploadCloud size={18} strokeWidth={2} />
         {btnLabel}
       </button>
 
-      <div className="upload-divider">Or capture image</div>
+      <div className="text-center text-xs text-text-muted my-1">Or capture image</div>
       <button
         type="button"
-        className="camera-btn"
-        onClick={() => alert('Camera capture coming soon!')}
+        className="flex items-center justify-center gap-2 w-full py-2.5 px-6 bg-surface hover:bg-bg-secondary border border-border text-text-primary font-medium text-xs rounded-pill transition-colors cursor-pointer"
+        onClick={() => showToast("info", "Camera capture coming soon!")}
       >
         <Camera size={16} strokeWidth={1.8} />
         Open Camera
       </button>
 
       {selectedBeach === "auto" && locStatus === "denied" && (
-        <p className="loc-note" style={{ color: "var(--muted)" }}>
-          Location access denied — uploaded without coordinates.
+        <p className="text-xs text-amber-600 dark:text-amber-400 italic">
+          ⚠️ Location access denied or timed out — upload will proceed without coordinates.
         </p>
       )}
       {selectedBeach === "auto" && locStatus === "granted" && (
-        <p className="loc-note" style={{ color: "var(--teal)" }}>
-          Location attached to this photo.
+        <p className="text-xs text-primary font-medium">
+          ✓ Accurate GPS coordinates attached to this scan.
         </p>
       )}
+
+      <ToastNotification toast={toast} />
     </form>
   );
 }
+
